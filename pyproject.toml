@@ -55,7 +55,7 @@ artifacts = [ "*.mo" ]
 [dependency-groups]
 dev = [
   "babel>=2.12.1",
-  "briefcase==0.3.25", # pinned because building relies on it!
+  "briefcase==0.3.26", # pinned because building relies on it!
   "coverage[toml]>=6.5",
   "coveralls>=3.3.1",
   "mdformat-gfm>=0.3.6",
