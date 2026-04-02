@@ -47,6 +47,7 @@ BuyMeACoffee = "https://www.buymeacoffee.com/dynobo"
 
 [project.scripts]
 normcap = "normcap.app:run"
+normcap-annotate-prototype = "normcap.annotate_prototype.app:run"
 
 [tool.hatch.build]
 exclude = [ "assets", "*.po" ]
