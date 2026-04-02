@@ -5,7 +5,7 @@ import logging
 from PySide6 import QtWidgets
 
 from normcap.gui.constants import URLS  # TODO: Remove
-from normcap.positioning.handlers import kscript, window_calls
+from normcap.positioning.handlers import kscript, qt_screen, window_calls
 from normcap.positioning.models import Handler, HandlerProtocol
 from normcap.system.models import Screen
 
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 _positioning_handlers: dict[Handler, HandlerProtocol] = {
+    Handler.QT_SCREEN: qt_screen,
     Handler.WINDOW_CALLS: window_calls,
     # TODO: Add Window Calls Extended handler
     Handler.KSCRIPT: kscript,

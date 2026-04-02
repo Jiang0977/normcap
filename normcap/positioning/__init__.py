@@ -1,5 +1,5 @@
-from .handlers import window_calls
+from .handlers import qt_screen, window_calls
 from .main import move, move_with_handler
 from .models import Handler
 
-__all__ = ["Handler", "move", "move_with_handler", "window_calls"]
+__all__ = ["Handler", "move", "move_with_handler", "qt_screen", "window_calls"]

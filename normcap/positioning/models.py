@@ -37,6 +37,9 @@ class Handler(enum.IntEnum):
     and uses the first one that is detected as compatible.
     """
 
+    # Preferred on GNOME Wayland with current Qt. No external dependency required.
+    QT_SCREEN = enum.auto()
+
     # Preferable on Wayland + Gnome
     WINDOW_CALLS = enum.auto()
 
