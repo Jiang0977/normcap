@@ -149,8 +149,8 @@ def _draw_undo_icon(painter: QtGui.QPainter) -> None:
     path.cubicTo(8.1, 10.4, 10.8, 8, 15.2, 8)
     path.lineTo(21, 8)
     painter.drawPath(path)
-    painter.drawLine(8.5, 8, 12.8, 4)
-    painter.drawLine(8.5, 8, 12.8, 12)
+    painter.drawLine(QtCore.QPointF(8.5, 8), QtCore.QPointF(12.8, 4))
+    painter.drawLine(QtCore.QPointF(8.5, 8), QtCore.QPointF(12.8, 12))
 
 
 def _draw_redo_icon(painter: QtGui.QPainter) -> None:
@@ -159,8 +159,8 @@ def _draw_redo_icon(painter: QtGui.QPainter) -> None:
     path.cubicTo(19.9, 10.4, 17.2, 8, 12.8, 8)
     path.lineTo(7, 8)
     painter.drawPath(path)
-    painter.drawLine(19.5, 8, 15.2, 4)
-    painter.drawLine(19.5, 8, 15.2, 12)
+    painter.drawLine(QtCore.QPointF(19.5, 8), QtCore.QPointF(15.2, 4))
+    painter.drawLine(QtCore.QPointF(19.5, 8), QtCore.QPointF(15.2, 12))
 
 
 def _draw_copy_icon(painter: QtGui.QPainter) -> None:
@@ -724,9 +724,7 @@ class AnnotationCanvas(QtWidgets.QWidget):
                 continue
             self.annotations[annotation_index] = replace(current, number=number)
 
-    def _edit_number_annotation(
-        self, index: int, annotation: NumberAnnotation
-    ) -> None:
+    def _edit_number_annotation(self, index: int, annotation: NumberAnnotation) -> None:
         number_count = sum(
             isinstance(current, NumberAnnotation) for current in self.annotations
         )
@@ -833,8 +831,7 @@ class AnnotationCanvas(QtWidgets.QWidget):
         if (
             self.tool == Tool.SELECT
             and self._selected_index is not None
-            and event.key()
-            in {QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace}
+            and event.key() in {QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace}
         ):
             self._record_history()
             self.annotations.pop(self._selected_index)

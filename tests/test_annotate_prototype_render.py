@@ -17,7 +17,7 @@ def test_build_arrow_head_uses_end_point_as_tip() -> None:
     polygon = build_arrow_head(start=start, end=end, size=12)
 
     assert polygon.count() == 3
-    assert polygon[0] == end
+    assert polygon.at(0) == end
 
 
 def test_compose_image_keeps_size_and_draws_on_copy() -> None:

@@ -14,7 +14,6 @@ macOS and Windows._**
 [![Flathub](https://img.shields.io/flathub/downloads/com.github.dynobo.normcap?label=Flathub%20downloads&color=blue)](https://flathub.org/apps/details/com.github.dynobo.normcap)
 [![AUR](https://img.shields.io/aur/votes/normcap?label=AUR%20votes&color=blue)](https://aur.archlinux.org/packages/normcap)
 
-
 **Links:** [Source Code](https://github.com/dynobo/normcap) |
 [Documentation](https://dynobo.github.io/normcap/) |
 [FAQs](https://dynobo.github.io/normcap/#faqs) |
@@ -176,6 +175,29 @@ uv run prek install
 uv run python -m normcap
 ```
 
+### Screenshot annotation prototype
+
+This branch adds a small screenshot annotation prototype that reuses NormCap's existing
+capture and region-selection flow, then opens a separate editor instead of running OCR.
+
+Current prototype scope:
+
+- Pen, rectangle, arrow, text and numbered markers
+- Blur and mosaic region effects with adjustable strength
+- Select, move, resize, delete, undo and redo for the supported annotations
+- Copy the annotated image to the clipboard or save it as PNG
+
+Run it from the project root:
+
+```sh
+uv run normcap-annotate-prototype
+```
+
+On GNOME Wayland, multi-monitor capture windows now also use a Qt-native screen
+positioning fallback (`QT_SCREEN`) before relying on external helpers. This keeps the
+prototype usable on Ubuntu 24.04 setups where no extra Wayland positioning integration
+is installed.
+
 ## Contribute to UI translations
 
 Please use [Weblate](https://hosted.weblate.org/projects/normcap/ui/) to complement or
@@ -225,7 +247,6 @@ If NormCap doesn't fit your needs, try these alternatives (no particular order):
 See [XKCD](https://xkcd.com):
 
 [![Comic](https://imgs.xkcd.com/comics/norm_normal_file_format.png)](https://xkcd.com/2116/)
-
 
 ## Certification
 

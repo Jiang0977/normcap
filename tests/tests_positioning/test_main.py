@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 
 from PySide6 import QtWidgets
 
@@ -67,7 +68,7 @@ def test_qt_screen_move_assigns_target_qscreen(monkeypatch) -> None:
         index=0,
     )
 
-    qt_screen.move(window=window, screen=screen)
+    qt_screen.move(window=cast(QtWidgets.QMainWindow, window), screen=screen)
 
     assert assigned["screen"] is target
     assert window.fullscreen_called is True

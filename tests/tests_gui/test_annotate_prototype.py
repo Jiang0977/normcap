@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import SimpleNamespace
+from typing import cast
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -66,9 +68,12 @@ def test_open_annotation_window_is_scheduled(monkeypatch) -> None:
         calls["delay"] = delay
         calls["callback"] = callback
 
-    fake_app = SimpleNamespace(
-        _close_capture_windows=fake_close_capture_windows,
-        _show_annotation_window=fake_show_annotation_window,
+    fake_app = cast(
+        app.PrototypeApp,
+        SimpleNamespace(
+            _close_capture_windows=fake_close_capture_windows,
+            _show_annotation_window=fake_show_annotation_window,
+        ),
     )
     monkeypatch.setattr(app.QtCore.QTimer, "singleShot", staticmethod(fake_single_shot))
 
@@ -78,7 +83,7 @@ def test_open_annotation_window_is_scheduled(monkeypatch) -> None:
     assert calls["closed"] is True
     assert calls["delay"] == 20
 
-    callback = calls["callback"]
+    callback = cast(Callable[[], None], calls["callback"])
     callback()
 
     assert calls["rect"] == rect
@@ -221,18 +226,26 @@ def test_tool_icons_have_distinct_checked_and_unchecked_states(qtbot) -> None:
     qtbot.add_widget(window)
 
     for action in window._tool_actions.values():
-        off = action.icon().pixmap(
-            24,
-            24,
-            QtGui.QIcon.Mode.Normal,
-            QtGui.QIcon.State.Off,
-        ).toImage()
-        on = action.icon().pixmap(
-            24,
-            24,
-            QtGui.QIcon.Mode.Normal,
-            QtGui.QIcon.State.On,
-        ).toImage()
+        off = (
+            action.icon()
+            .pixmap(
+                24,
+                24,
+                QtGui.QIcon.Mode.Normal,
+                QtGui.QIcon.State.Off,
+            )
+            .toImage()
+        )
+        on = (
+            action.icon()
+            .pixmap(
+                24,
+                24,
+                QtGui.QIcon.Mode.Normal,
+                QtGui.QIcon.State.On,
+            )
+            .toImage()
+        )
         assert _images_differ(off, on) is True
 
 
@@ -641,6 +654,7 @@ def test_double_click_text_annotation_updates_text(monkeypatch, qtbot) -> None:
     )
 
     text_annotation = window.canvas.annotations[-1]
+    assert isinstance(text_annotation, TextAnnotation)
     assert text_annotation.text == "New text"
 
 

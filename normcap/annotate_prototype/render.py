@@ -71,9 +71,7 @@ def _draw_arrow_annotation(
     painter.drawPolygon(arrow_head)
 
 
-def _draw_text_annotation(
-    painter: QtGui.QPainter, annotation: TextAnnotation
-) -> None:
+def _draw_text_annotation(painter: QtGui.QPainter, annotation: TextAnnotation) -> None:
     painter.setPen(annotation.color)
     font = painter.font()
     font.setPointSize(annotation.font_size)
@@ -108,9 +106,7 @@ def _draw_number_annotation(
     )
 
 
-def _draw_effect_outline(
-    painter: QtGui.QPainter, annotation: EffectAnnotation
-) -> None:
+def _draw_effect_outline(painter: QtGui.QPainter, annotation: EffectAnnotation) -> None:
     pen = QtGui.QPen(
         annotation.color,
         annotation.width,
