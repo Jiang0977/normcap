@@ -10,6 +10,7 @@ from normcap.annotate_prototype.models import (
     EffectAnnotation,
     NumberAnnotation,
     RectangleAnnotation,
+    TextAnnotation,
     Tool,
 )
 from normcap.system.models import Rect
@@ -37,6 +38,18 @@ def _images_differ(left: QtGui.QImage, right: QtGui.QImage) -> bool:
             if left.pixelColor(x, y) != right.pixelColor(x, y):
                 return True
     return False
+
+
+def _grab_widget_image(widget: QtWidgets.QWidget) -> QtGui.QImage:
+    QtWidgets.QApplication.processEvents()
+    image = QtGui.QImage(widget.size(), QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("transparent"))
+    painter = QtGui.QPainter(image)
+    try:
+        widget.render(painter, QtCore.QPoint())
+    finally:
+        painter.end()
+    return image
 
 
 def test_open_annotation_window_is_scheduled(monkeypatch) -> None:
@@ -430,6 +443,81 @@ def test_select_tool_moves_existing_arrow_annotation(qtbot) -> None:
     assert arrow.end == QtCore.QPointF(45, 50)
 
 
+def test_select_tool_moves_existing_text_annotation(monkeypatch, qtbot) -> None:
+    def fake_get_text(*_args, **_kwargs):
+        return ("Move me", True)
+
+    monkeypatch.setattr(
+        editor.QtWidgets.QInputDialog,
+        "getText",
+        staticmethod(fake_get_text),
+    )
+
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.TEXT)
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 25),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 25),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(35, 40))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(35, 40),
+    )
+
+    text_annotation = window.canvas.annotations[-1]
+    assert isinstance(text_annotation, TextAnnotation)
+    assert text_annotation.position == QtCore.QPointF(35, 40)
+
+
+def test_select_tool_moves_existing_number_annotation(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.NUMBER)
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(35, 35))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(35, 35),
+    )
+
+    number_annotation = window.canvas.annotations[-1]
+    assert isinstance(number_annotation, NumberAnnotation)
+    assert number_annotation.position == QtCore.QPointF(35, 35)
+
+
 def test_select_tool_resizes_existing_blur_region(qtbot) -> None:
     image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
     image.fill(QtGui.QColor("white"))
@@ -649,3 +737,38 @@ def test_undo_and_redo_restore_moved_rectangle_annotation(qtbot) -> None:
     redone = window.canvas.annotations[-1]
     assert isinstance(redone, RectangleAnnotation)
     assert redone.rect.normalized() == QtCore.QRectF(25, 30, 20, 20)
+
+
+def test_select_tool_draws_visible_selection_handles(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.RECTANGLE)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    before = _grab_widget_image(window.canvas)
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+
+    after = _grab_widget_image(window.canvas)
+
+    assert _changed_pixels(before, after, 6, 6, 14, 14) > 0

@@ -70,6 +70,7 @@ _ICON_NORMAL_COLOR = QtGui.QColor("#35213f")
 _ICON_ACTIVE_COLOR = QtGui.QColor("white")
 _ICON_DISABLED_COLOR = QtGui.QColor("#9484a0")
 _SELECTION_HANDLE_RADIUS = 8
+_SELECTION_HANDLE_SIZE = 8
 
 
 def _tool_accent_color(color: QtGui.QColor) -> str:
@@ -275,6 +276,16 @@ def _text_annotation_rect(annotation: TextAnnotation) -> QtCore.QRectF:
     rect = metrics.tightBoundingRect(annotation.text)
     rect.translate(annotation.position)
     return rect.adjusted(-4, -4, 4, 4)
+
+
+def _number_annotation_rect(annotation: NumberAnnotation) -> QtCore.QRectF:
+    radius = annotation.radius + 4
+    return QtCore.QRectF(
+        annotation.position.x() - radius,
+        annotation.position.y() - radius,
+        radius * 2,
+        radius * 2,
+    )
 
 
 def _clone_annotation(annotation: Annotation) -> Annotation:
@@ -518,6 +529,27 @@ class AnnotationCanvas(QtWidgets.QWidget):
                 return index
         return None
 
+    def _selection_outline_path(self, annotation: Annotation) -> QtGui.QPainterPath:
+        path = QtGui.QPainterPath()
+        if isinstance(annotation, (RectangleAnnotation, EffectAnnotation)):
+            path.addRect(annotation.rect.normalized().adjusted(-3, -3, 3, 3))
+            return path
+
+        if isinstance(annotation, ArrowAnnotation):
+            path.moveTo(annotation.start)
+            path.lineTo(annotation.end)
+            return path
+
+        if isinstance(annotation, TextAnnotation):
+            path.addRoundedRect(_text_annotation_rect(annotation), 4, 4)
+            return path
+
+        if isinstance(annotation, NumberAnnotation):
+            path.addEllipse(_number_annotation_rect(annotation))
+            return path
+
+        return path
+
     def _annotation_handles(self, annotation: Annotation) -> dict[str, QtCore.QPointF]:
         if isinstance(annotation, (RectangleAnnotation, EffectAnnotation)):
             rect = annotation.rect.normalized()
@@ -614,6 +646,21 @@ class AnnotationCanvas(QtWidgets.QWidget):
 
         return False
 
+    def _drag_point_annotation(
+        self,
+        annotation: TextAnnotation | NumberAnnotation,
+        delta: QtCore.QPointF,
+    ) -> bool:
+        if self._selected_index is None or self._selection_mode != "move":
+            return False
+
+        self.annotations[self._selected_index] = replace(
+            annotation,
+            position=annotation.position + delta,
+        )
+        self.update()
+        return True
+
     def _drag_selected_annotation(self, position: QtCore.QPointF) -> None:
         if (
             self._selected_index is None
@@ -634,6 +681,11 @@ class AnnotationCanvas(QtWidgets.QWidget):
 
         if isinstance(annotation, ArrowAnnotation) and self._drag_arrow_annotation(
             annotation, position, delta
+        ):
+            return
+
+        if isinstance(annotation, (TextAnnotation, NumberAnnotation)) and (
+            self._drag_point_annotation(annotation, delta)
         ):
             return
 
@@ -737,12 +789,44 @@ class AnnotationCanvas(QtWidgets.QWidget):
 
         draw_annotation(painter, preview)
 
+    def _paint_selection(self, painter: QtGui.QPainter) -> None:
+        if self.tool != Tool.SELECT or self._selected_index is None:
+            return
+
+        annotation = self.annotations[self._selected_index]
+        highlight = QtGui.QColor(self.color)
+        highlight.setAlpha(230)
+        pen = QtGui.QPen(
+            highlight,
+            2,
+            QtCore.Qt.PenStyle.DashLine,
+            QtCore.Qt.PenCapStyle.RoundCap,
+            QtCore.Qt.PenJoinStyle.RoundJoin,
+        )
+        painter.setPen(pen)
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+        painter.drawPath(self._selection_outline_path(annotation))
+
+        handle_pen = QtGui.QPen(highlight, 1.5)
+        handle_brush = QtGui.QBrush(QtGui.QColor("white"))
+        for point in self._annotation_handles(annotation).values():
+            handle_rect = QtCore.QRectF(
+                point.x() - _SELECTION_HANDLE_SIZE / 2,
+                point.y() - _SELECTION_HANDLE_SIZE / 2,
+                _SELECTION_HANDLE_SIZE,
+                _SELECTION_HANDLE_SIZE,
+            )
+            painter.setPen(handle_pen)
+            painter.setBrush(handle_brush)
+            painter.drawRect(handle_rect)
+
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
         super().paintEvent(event)
         painter = QtGui.QPainter(self)
         painter.drawImage(0, 0, self.display_image())
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
         self._paint_preview(painter)
+        self._paint_selection(painter)
         painter.end()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:  # noqa: N802
