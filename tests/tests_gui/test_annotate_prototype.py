@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from PySide6 import QtGui
+from PySide6 import QtCore, QtGui
 
 from normcap.annotate_prototype import app, editor
+from normcap.annotate_prototype.models import EffectAnnotation, Tool
 from normcap.system.models import Rect
 
 
@@ -50,3 +51,27 @@ def test_annotation_window_emits_closed_signal(qtbot) -> None:
 
     with qtbot.waitSignal(window.com.on_closed, timeout=1000):
         window.close()
+
+
+def test_blur_tool_creates_effect_annotation(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.canvas.set_tool(Tool.BLUR)
+
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    assert isinstance(window.canvas.annotations[-1], EffectAnnotation)
+    assert window.canvas.annotations[-1].effect == Tool.BLUR

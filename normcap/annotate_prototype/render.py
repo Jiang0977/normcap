@@ -9,9 +9,11 @@ from PySide6 import QtCore, QtGui
 from normcap.annotate_prototype.models import (
     Annotation,
     ArrowAnnotation,
+    EffectAnnotation,
     RectangleAnnotation,
     StrokeAnnotation,
     TextAnnotation,
+    Tool,
 )
 
 
@@ -103,7 +105,83 @@ def draw_annotation(painter: QtGui.QPainter, annotation: Annotation) -> None:
         painter.drawText(annotation.position, annotation.text)
         return
 
+    if isinstance(annotation, EffectAnnotation):
+        pen = QtGui.QPen(
+            annotation.color,
+            annotation.width,
+            QtCore.Qt.PenStyle.DashLine,
+        )
+        painter.setPen(pen)
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+        rect = annotation.rect.normalized()
+        painter.drawRect(rect)
+
+        font = painter.font()
+        font.setPointSize(10)
+        font.setBold(True)
+        painter.setFont(font)
+
+        label = "BLUR" if annotation.effect == Tool.BLUR else "MOSAIC"
+        label_rect = QtCore.QRectF(rect.left(), rect.top() - 20, 90, 18)
+        painter.fillRect(label_rect, QtGui.QColor(0, 0, 0, 160))
+        painter.setPen(QtGui.QColor("white"))
+        painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignCenter, label)
+        return
+
     raise TypeError(f"Unsupported annotation type: {type(annotation)!r}")
+
+
+def _normalized_image_rect(
+    image: QtGui.QImage, rect: QtCore.QRectF
+) -> QtCore.QRect | None:
+    qrect = rect.normalized().toAlignedRect().intersected(image.rect())
+    if qrect.width() <= 0 or qrect.height() <= 0:
+        return None
+    return qrect
+
+
+def _draw_effect_annotation(image: QtGui.QImage, annotation: EffectAnnotation) -> None:
+    target_rect = _normalized_image_rect(image=image, rect=annotation.rect)
+    if target_rect is None:
+        return
+
+    source = image.copy(target_rect)
+    if source.isNull():
+        return
+
+    strength = max(2, annotation.strength)
+    if annotation.effect == Tool.MOSAIC:
+        sampled = source.scaled(
+            max(1, target_rect.width() // strength),
+            max(1, target_rect.height() // strength),
+            QtCore.Qt.AspectRatioMode.IgnoreAspectRatio,
+            QtCore.Qt.TransformationMode.FastTransformation,
+        )
+        processed = sampled.scaled(
+            target_rect.size(),
+            QtCore.Qt.AspectRatioMode.IgnoreAspectRatio,
+            QtCore.Qt.TransformationMode.FastTransformation,
+        )
+    elif annotation.effect == Tool.BLUR:
+        processed = source
+        for _ in range(2):
+            sampled = processed.scaled(
+                max(1, target_rect.width() // strength),
+                max(1, target_rect.height() // strength),
+                QtCore.Qt.AspectRatioMode.IgnoreAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation,
+            )
+            processed = sampled.scaled(
+                target_rect.size(),
+                QtCore.Qt.AspectRatioMode.IgnoreAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation,
+            )
+    else:
+        raise TypeError(f"Unsupported effect annotation: {annotation.effect!r}")
+
+    painter = QtGui.QPainter(image)
+    painter.drawImage(target_rect.topLeft(), processed)
+    painter.end()
 
 
 def compose_image(
@@ -114,6 +192,12 @@ def compose_image(
     painter = QtGui.QPainter(image)
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
     for annotation in annotations:
+        if isinstance(annotation, EffectAnnotation):
+            painter.end()
+            _draw_effect_annotation(image=image, annotation=annotation)
+            painter = QtGui.QPainter(image)
+            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+            continue
         draw_annotation(painter, annotation)
     painter.end()
     return image

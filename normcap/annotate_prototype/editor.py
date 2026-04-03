@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from normcap.annotate_prototype.models import (
     Annotation,
     ArrowAnnotation,
+    EffectAnnotation,
     RectangleAnnotation,
     StrokeAnnotation,
     TextAnnotation,
@@ -32,6 +33,8 @@ class AnnotationCanvas(QtWidgets.QWidget):
         self.color = QtGui.QColor("#ff2e88")
         self.stroke_width = 4
         self.font_size = 24
+        self.blur_strength = 10
+        self.mosaic_strength = 16
 
         self._stroke_points: list[QtCore.QPointF] | None = None
         self._drag_start: QtCore.QPointF | None = None
@@ -82,6 +85,20 @@ class AnnotationCanvas(QtWidgets.QWidget):
                     rect=QtCore.QRectF(self._drag_start, self._drag_end),
                     color=QtGui.QColor(self.color),
                     width=self.stroke_width,
+                ),
+            )
+        elif self.tool in {Tool.BLUR, Tool.MOSAIC}:
+            strength = (
+                self.blur_strength if self.tool == Tool.BLUR else self.mosaic_strength
+            )
+            draw_annotation(
+                painter,
+                EffectAnnotation(
+                    rect=QtCore.QRectF(self._drag_start, self._drag_end),
+                    effect=self.tool,
+                    strength=strength,
+                    color=QtGui.QColor(self.color),
+                    width=max(2, self.stroke_width - 1),
                 ),
             )
         elif self.tool == Tool.ARROW:
@@ -180,6 +197,19 @@ class AnnotationCanvas(QtWidgets.QWidget):
                     width=self.stroke_width,
                 )
             )
+        elif self.tool in {Tool.BLUR, Tool.MOSAIC}:
+            strength = (
+                self.blur_strength if self.tool == Tool.BLUR else self.mosaic_strength
+            )
+            self.annotations.append(
+                EffectAnnotation(
+                    rect=QtCore.QRectF(self._drag_start, self._drag_end),
+                    effect=self.tool,
+                    strength=strength,
+                    color=QtGui.QColor(self.color),
+                    width=max(2, self.stroke_width - 1),
+                )
+            )
         elif self.tool == Tool.ARROW:
             self.annotations.append(
                 ArrowAnnotation(
@@ -246,6 +276,8 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         self._add_tool_action(toolbar, "Rectangle", Tool.RECTANGLE, "R")
         self._add_tool_action(toolbar, "Arrow", Tool.ARROW, "A")
         self._add_tool_action(toolbar, "Text", Tool.TEXT, "T")
+        self._add_tool_action(toolbar, "Blur", Tool.BLUR, "B")
+        self._add_tool_action(toolbar, "Mosaic", Tool.MOSAIC, "M")
 
         for action in self._tool_actions.values():
             action_group.addAction(action)

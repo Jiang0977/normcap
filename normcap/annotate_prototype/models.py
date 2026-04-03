@@ -15,6 +15,8 @@ class Tool(str, Enum):
     RECTANGLE = "rectangle"
     ARROW = "arrow"
     TEXT = "text"
+    BLUR = "blur"
+    MOSAIC = "mosaic"
 
 
 @dataclass(slots=True)
@@ -47,4 +49,19 @@ class TextAnnotation:
     font_size: int
 
 
-Annotation = StrokeAnnotation | RectangleAnnotation | ArrowAnnotation | TextAnnotation
+@dataclass(slots=True)
+class EffectAnnotation:
+    rect: QtCore.QRectF
+    effect: Tool
+    strength: int
+    color: QtGui.QColor
+    width: int
+
+
+Annotation = (
+    StrokeAnnotation
+    | RectangleAnnotation
+    | ArrowAnnotation
+    | TextAnnotation
+    | EffectAnnotation
+)
