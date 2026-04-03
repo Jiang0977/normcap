@@ -128,17 +128,17 @@ def test_effect_strength_control_tracks_active_tool(qtbot) -> None:
     qtbot.add_widget(window)
     window.show()
 
-    window._tool_actions[Tool.BLUR].trigger()
+    window._select_tool(Tool.BLUR)
     window._strength_spinbox.setValue(7)
     assert window.canvas.blur_strength == 7
 
-    window._tool_actions[Tool.MOSAIC].trigger()
-    assert window._strength_spinbox.isVisible() is True
+    window._select_tool(Tool.MOSAIC)
+    assert window._strength_spinbox_action.isVisible() is True
     window._strength_spinbox.setValue(13)
     assert window.canvas.mosaic_strength == 13
 
-    window._tool_actions[Tool.PEN].trigger()
-    assert window._strength_spinbox.isVisible() is False
+    window._select_tool(Tool.PEN)
+    assert window._strength_spinbox_action.isVisible() is False
 
 
 def test_effect_preview_changes_display_image(qtbot) -> None:
@@ -157,3 +157,27 @@ def test_effect_preview_changes_display_image(qtbot) -> None:
     display = window.canvas.display_image()
 
     assert _changed_pixels(image, display, 8, 8, 24, 24) > 0
+
+
+def test_tool_actions_have_icons(qtbot) -> None:
+    image = QtGui.QImage(40, 40, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+
+    for action in window._tool_actions.values():
+        assert action.icon().isNull() is False
+
+
+def test_status_message_updates_with_tool_selection(qtbot) -> None:
+    image = QtGui.QImage(40, 40, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._tool_actions[Tool.NUMBER].trigger()
+
+    assert "Tool: Number" in window.statusBar().currentMessage()

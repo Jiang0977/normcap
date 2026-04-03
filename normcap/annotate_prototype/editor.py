@@ -27,6 +27,126 @@ class Communicate(QtCore.QObject):
     on_closed = QtCore.Signal()
 
 
+_TOOLBAR_STYLE = """
+QToolBar {
+    spacing: 6px;
+    padding: 6px;
+    border: none;
+}
+QToolButton {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    color: white;
+    padding: 8px 10px;
+    min-width: 70px;
+    min-height: 52px;
+}
+QToolButton:hover {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+QToolButton:checked {
+    background-color: %s;
+    border: 1px solid rgba(255, 255, 255, 0.30);
+    color: white;
+}
+QLabel {
+    color: rgba(255, 255, 255, 0.75);
+    font-weight: 600;
+    padding-left: 8px;
+}
+QSpinBox {
+    min-width: 68px;
+    padding: 4px 6px;
+}
+"""
+
+
+def _tool_accent_color(color: QtGui.QColor) -> str:
+    highlight = QtGui.QColor(color)
+    highlight.setAlpha(220)
+    return highlight.name(QtGui.QColor.NameFormat.HexArgb)
+
+
+def _draw_pen_icon(painter: QtGui.QPainter) -> None:
+    painter.drawLine(6, 21, 15, 12)
+    painter.drawLine(15, 12, 22, 5)
+    painter.drawEllipse(QtCore.QPointF(7, 21), 1.2, 1.2)
+
+
+def _draw_rectangle_icon(painter: QtGui.QPainter) -> None:
+    painter.drawRect(5, 6, 18, 15)
+
+
+def _draw_arrow_icon(painter: QtGui.QPainter) -> None:
+    painter.drawLine(5, 21, 21, 7)
+    painter.drawLine(14, 7, 21, 7)
+    painter.drawLine(21, 7, 21, 14)
+
+
+def _draw_text_icon(painter: QtGui.QPainter, text: str, color: str = "white") -> None:
+    painter.setPen(QtGui.QColor(color))
+    font = painter.font()
+    font.setBold(True)
+    font.setPointSize(14)
+    painter.setFont(font)
+    painter.drawText(
+        QtCore.QRect(0, 0, 28, 28),
+        QtCore.Qt.AlignmentFlag.AlignCenter,
+        text,
+    )
+
+
+def _draw_number_icon(painter: QtGui.QPainter) -> None:
+    painter.setBrush(QtGui.QColor("white"))
+    painter.drawEllipse(5, 5, 18, 18)
+    _draw_text_icon(painter, "1", color="#551255")
+
+
+def _draw_blur_icon(painter: QtGui.QPainter) -> None:
+    for radius in (4, 7):
+        painter.drawEllipse(QtCore.QPointF(14, 14), radius, radius)
+
+
+def _draw_mosaic_icon(painter: QtGui.QPainter) -> None:
+    painter.setBrush(QtGui.QColor("white"))
+    for row in range(3):
+        for col in range(3):
+            if (row + col) % 2 == 0:
+                painter.drawRect(5 + col * 6, 5 + row * 6, 4, 4)
+
+
+_ICON_DRAWERS = {
+    Tool.PEN: _draw_pen_icon,
+    Tool.RECTANGLE: _draw_rectangle_icon,
+    Tool.ARROW: _draw_arrow_icon,
+    Tool.TEXT: lambda painter: _draw_text_icon(painter, "T"),
+    Tool.NUMBER: _draw_number_icon,
+    Tool.BLUR: _draw_blur_icon,
+    Tool.MOSAIC: _draw_mosaic_icon,
+}
+
+
+def _build_tool_icon(tool: Tool) -> QtGui.QIcon:
+    pixmap = QtGui.QPixmap(28, 28)
+    pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+
+    painter = QtGui.QPainter(pixmap)
+    painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+    pen = QtGui.QPen(QtGui.QColor("white"), 2)
+    pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+    try:
+        _ICON_DRAWERS[tool](painter)
+    except KeyError as exc:
+        raise TypeError(f"Unsupported tool icon: {tool!r}") from exc
+
+    painter.end()
+    return QtGui.QIcon(pixmap)
+
+
 class AnnotationCanvas(QtWidgets.QWidget):
     """Canvas displaying the cropped screenshot and user annotations."""
 
@@ -289,7 +409,9 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.scroll_area)
 
         self._tool_actions: dict[Tool, QtGui.QAction] = {}
+        self._toolbar: QtWidgets.QToolBar | None = None
         self._create_toolbar()
+        self._apply_toolbar_style()
         self.statusBar().showMessage("Select a tool and annotate the screenshot.")
 
     def _add_tool_action(
@@ -300,21 +422,22 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         shortcut: str,
     ) -> None:
         action = QtGui.QAction(text, self)
+        action.setObjectName(f"tool_{tool.value}")
         action.setCheckable(True)
         action.setShortcut(shortcut)
-        action.triggered.connect(
-            lambda checked, t=tool: checked and self.canvas.set_tool(t)
-        )
+        action.setIcon(_build_tool_icon(tool))
+        action.setToolTip(f"{text} ({shortcut})")
+        action.triggered.connect(lambda _checked, t=tool: self._select_tool(t))
         toolbar.addAction(action)
         self._tool_actions[tool] = action
 
     def _create_toolbar(self) -> None:
         toolbar = QtWidgets.QToolBar("Tools")
         toolbar.setMovable(False)
+        toolbar.setIconSize(QtCore.QSize(24, 24))
+        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         self.addToolBar(toolbar)
-
-        action_group = QtGui.QActionGroup(self)
-        action_group.setExclusive(True)
+        self._toolbar = toolbar
 
         self._add_tool_action(toolbar, "Pen", Tool.PEN, "P")
         self._add_tool_action(toolbar, "Rectangle", Tool.RECTANGLE, "R")
@@ -324,13 +447,6 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         self._add_tool_action(toolbar, "Blur", Tool.BLUR, "B")
         self._add_tool_action(toolbar, "Mosaic", Tool.MOSAIC, "M")
 
-        for action in self._tool_actions.values():
-            action_group.addAction(action)
-
-        self._tool_actions[Tool.PEN].setChecked(True)
-
-        self._effect_action_group = action_group
-
         toolbar.addSeparator()
 
         color_action = QtGui.QAction("Color", self)
@@ -338,7 +454,7 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         toolbar.addAction(color_action)
 
         self._strength_label = QtWidgets.QLabel("Strength")
-        toolbar.addWidget(self._strength_label)
+        self._strength_label_action = toolbar.addWidget(self._strength_label)
 
         self._strength_spinbox = QtWidgets.QSpinBox()
         self._strength_spinbox.setRange(2, 32)
@@ -347,7 +463,7 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         self._strength_spinbox.valueChanged.connect(
             self.canvas.set_current_effect_strength
         )
-        toolbar.addWidget(self._strength_spinbox)
+        self._strength_spinbox_action = toolbar.addWidget(self._strength_spinbox)
 
         undo_action = QtGui.QAction("Undo", self)
         undo_action.setShortcut(QtGui.QKeySequence.StandardKey.Undo)
@@ -364,15 +480,28 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         save_action.triggered.connect(self.save_image)
         toolbar.addAction(save_action)
 
-        for tool, action in self._tool_actions.items():
-            action.triggered.connect(
-                lambda checked, selected=tool: checked
-                and self._sync_effect_controls(selected)
-            )
-        self._sync_effect_controls(Tool.PEN)
+        self._select_tool(Tool.PEN)
+
+    def _apply_toolbar_style(self) -> None:
+        if self._toolbar is None:
+            return
+        self._toolbar.setStyleSheet(
+            _TOOLBAR_STYLE % _tool_accent_color(self.canvas.color)
+        )
+
+    def _select_tool(self, tool: Tool) -> None:
+        for current_tool, action in self._tool_actions.items():
+            action.blockSignals(True)
+            action.setChecked(current_tool == tool)
+            action.blockSignals(False)
+        self.canvas.set_tool(tool)
+        self._sync_effect_controls(tool)
+        self._update_status(tool)
 
     def _sync_effect_controls(self, tool: Tool) -> None:
         is_effect_tool = tool in {Tool.BLUR, Tool.MOSAIC}
+        self._strength_label_action.setVisible(is_effect_tool)
+        self._strength_spinbox_action.setVisible(is_effect_tool)
         self._strength_label.setVisible(is_effect_tool)
         self._strength_spinbox.setVisible(is_effect_tool)
         if not is_effect_tool:
@@ -382,10 +511,25 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         self._strength_spinbox.setValue(self.canvas.current_effect_strength())
         self._strength_spinbox.blockSignals(False)
 
+    def _update_status(self, tool: Tool) -> None:
+        descriptions = {
+            Tool.PEN: "Freehand drawing",
+            Tool.RECTANGLE: "Draw rectangles",
+            Tool.ARROW: "Draw arrows",
+            Tool.TEXT: "Insert text",
+            Tool.NUMBER: "Place numbered markers",
+            Tool.BLUR: "Blur selected areas",
+            Tool.MOSAIC: "Pixelate selected areas",
+        }
+        self.statusBar().showMessage(
+            f"Tool: {tool.value.title()} | {descriptions[tool]}", 4000
+        )
+
     def _pick_color(self) -> None:
         color = QtWidgets.QColorDialog.getColor(self.canvas.color, self, "Pick Color")
         if color.isValid():
             self.canvas.set_color(color)
+            self._apply_toolbar_style()
 
     def copy_image(self) -> None:
         QtGui.QGuiApplication.clipboard().setImage(self.canvas.rendered_image())
