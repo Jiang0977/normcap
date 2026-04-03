@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from PySide6 import QtCore, QtGui
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from normcap.annotate_prototype import app, editor
 from normcap.annotate_prototype.models import EffectAnnotation, NumberAnnotation, Tool
@@ -23,6 +23,14 @@ def _changed_pixels(
             if before.pixelColor(x, y) != after.pixelColor(x, y):
                 changed += 1
     return changed
+
+
+def _images_differ(left: QtGui.QImage, right: QtGui.QImage) -> bool:
+    for y in range(left.height()):
+        for x in range(left.width()):
+            if left.pixelColor(x, y) != right.pixelColor(x, y):
+                return True
+    return False
 
 
 def test_open_annotation_window_is_scheduled(monkeypatch) -> None:
@@ -168,6 +176,45 @@ def test_tool_actions_have_icons(qtbot) -> None:
 
     for action in window._tool_actions.values():
         assert action.icon().isNull() is False
+
+
+def test_toolbar_uses_icon_only_buttons(qtbot) -> None:
+    image = QtGui.QImage(40, 40, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+
+    assert window._toolbar is not None
+    assert (
+        window._toolbar.toolButtonStyle()
+        == QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly
+    )
+    labels = window.findChildren(QtWidgets.QLabel)
+    assert all(label.text() != "Strength" for label in labels)
+
+
+def test_tool_icons_have_distinct_checked_and_unchecked_states(qtbot) -> None:
+    image = QtGui.QImage(40, 40, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+
+    for action in window._tool_actions.values():
+        off = action.icon().pixmap(
+            24,
+            24,
+            QtGui.QIcon.Mode.Normal,
+            QtGui.QIcon.State.Off,
+        ).toImage()
+        on = action.icon().pixmap(
+            24,
+            24,
+            QtGui.QIcon.Mode.Normal,
+            QtGui.QIcon.State.On,
+        ).toImage()
+        assert _images_differ(off, on) is True
 
 
 def test_status_message_updates_with_tool_selection(qtbot) -> None:

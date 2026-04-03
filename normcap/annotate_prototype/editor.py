@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from normcap.annotate_prototype.models import (
@@ -30,36 +32,42 @@ class Communicate(QtCore.QObject):
 _TOOLBAR_STYLE = """
 QToolBar {
     spacing: 6px;
-    padding: 6px;
+    padding: 6px 8px;
+    background-color: rgba(248, 245, 250, 0.96);
     border: none;
+    border-bottom: 1px solid rgba(53, 33, 63, 0.10);
 }
 QToolButton {
-    background-color: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background-color: transparent;
+    border: 1px solid transparent;
     border-radius: 10px;
-    color: white;
-    padding: 8px 10px;
-    min-width: 70px;
-    min-height: 52px;
+    color: #35213f;
+    padding: 8px;
+    min-width: 40px;
+    min-height: 40px;
 }
 QToolButton:hover {
-    background-color: rgba(255, 255, 255, 0.16);
+    background-color: rgba(53, 33, 63, 0.06);
+    border-color: rgba(53, 33, 63, 0.10);
 }
 QToolButton:checked {
     background-color: %s;
-    border: 1px solid rgba(255, 255, 255, 0.30);
+    border: 1px solid rgba(53, 33, 63, 0.12);
     color: white;
 }
-QLabel {
-    color: rgba(255, 255, 255, 0.75);
-    font-weight: 600;
-    padding-left: 8px;
+QToolButton:pressed {
+    background-color: rgba(53, 33, 63, 0.12);
 }
 QSpinBox {
     min-width: 68px;
     padding: 4px 6px;
 }
 """
+
+_ICON_SIZE = 28
+_ICON_NORMAL_COLOR = QtGui.QColor("#35213f")
+_ICON_ACTIVE_COLOR = QtGui.QColor("white")
+_ICON_DISABLED_COLOR = QtGui.QColor("#9484a0")
 
 
 def _tool_accent_color(color: QtGui.QColor) -> str:
@@ -84,8 +92,13 @@ def _draw_arrow_icon(painter: QtGui.QPainter) -> None:
     painter.drawLine(21, 7, 21, 14)
 
 
-def _draw_text_icon(painter: QtGui.QPainter, text: str, color: str = "white") -> None:
-    painter.setPen(QtGui.QColor(color))
+def _draw_text_icon(
+    painter: QtGui.QPainter,
+    text: str,
+    color: QtGui.QColor | None = None,
+) -> None:
+    if color is not None:
+        painter.setPen(color)
     font = painter.font()
     font.setBold(True)
     font.setPointSize(14)
@@ -98,9 +111,8 @@ def _draw_text_icon(painter: QtGui.QPainter, text: str, color: str = "white") ->
 
 
 def _draw_number_icon(painter: QtGui.QPainter) -> None:
-    painter.setBrush(QtGui.QColor("white"))
     painter.drawEllipse(5, 5, 18, 18)
-    _draw_text_icon(painter, "1", color="#551255")
+    _draw_text_icon(painter, "1")
 
 
 def _draw_blur_icon(painter: QtGui.QPainter) -> None:
@@ -109,11 +121,38 @@ def _draw_blur_icon(painter: QtGui.QPainter) -> None:
 
 
 def _draw_mosaic_icon(painter: QtGui.QPainter) -> None:
-    painter.setBrush(QtGui.QColor("white"))
+    painter.setBrush(painter.pen().color())
     for row in range(3):
         for col in range(3):
             if (row + col) % 2 == 0:
                 painter.drawRect(5 + col * 6, 5 + row * 6, 4, 4)
+
+
+def _draw_color_icon(painter: QtGui.QPainter, color: QtGui.QColor) -> None:
+    painter.setBrush(color)
+    painter.drawEllipse(5, 5, 18, 18)
+
+
+def _draw_undo_icon(painter: QtGui.QPainter) -> None:
+    path = QtGui.QPainterPath(QtCore.QPointF(20, 19))
+    path.cubicTo(14, 19, 9.5, 18, 8.7, 13.8)
+    path.cubicTo(8.1, 10.4, 10.8, 8, 15.2, 8)
+    path.lineTo(21, 8)
+    painter.drawPath(path)
+    painter.drawLine(8.5, 8, 12.8, 4)
+    painter.drawLine(8.5, 8, 12.8, 12)
+
+
+def _draw_copy_icon(painter: QtGui.QPainter) -> None:
+    painter.drawRect(9, 5, 12, 14)
+    painter.drawRect(5, 9, 12, 14)
+
+
+def _draw_save_icon(painter: QtGui.QPainter) -> None:
+    painter.drawRect(5, 5, 18, 18)
+    painter.drawLine(9, 5, 9, 11)
+    painter.drawLine(19, 5, 19, 11)
+    painter.drawRect(9, 15, 10, 6)
 
 
 _ICON_DRAWERS = {
@@ -126,25 +165,76 @@ _ICON_DRAWERS = {
     Tool.MOSAIC: _draw_mosaic_icon,
 }
 
+IconDrawer = Callable[[QtGui.QPainter], None]
 
-def _build_tool_icon(tool: Tool) -> QtGui.QIcon:
-    pixmap = QtGui.QPixmap(28, 28)
+
+def _build_icon_pixmap(drawer: IconDrawer, color: QtGui.QColor) -> QtGui.QPixmap:
+    pixmap = QtGui.QPixmap(_ICON_SIZE, _ICON_SIZE)
     pixmap.fill(QtCore.Qt.GlobalColor.transparent)
 
     painter = QtGui.QPainter(pixmap)
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-    pen = QtGui.QPen(QtGui.QColor("white"), 2)
+    pen = QtGui.QPen(QtGui.QColor(color), 2)
     pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
     pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
     painter.setPen(pen)
     painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
-    try:
-        _ICON_DRAWERS[tool](painter)
-    except KeyError as exc:
-        raise TypeError(f"Unsupported tool icon: {tool!r}") from exc
+    drawer(painter)
 
     painter.end()
-    return QtGui.QIcon(pixmap)
+    return pixmap
+
+
+def _build_stateful_icon(drawer: IconDrawer) -> QtGui.QIcon:
+    icon = QtGui.QIcon()
+    icon.addPixmap(
+        _build_icon_pixmap(drawer, _ICON_NORMAL_COLOR),
+        QtGui.QIcon.Mode.Normal,
+        QtGui.QIcon.State.Off,
+    )
+    icon.addPixmap(
+        _build_icon_pixmap(drawer, _ICON_DISABLED_COLOR),
+        QtGui.QIcon.Mode.Disabled,
+        QtGui.QIcon.State.Off,
+    )
+    icon.addPixmap(
+        _build_icon_pixmap(drawer, _ICON_ACTIVE_COLOR),
+        QtGui.QIcon.Mode.Normal,
+        QtGui.QIcon.State.On,
+    )
+    icon.addPixmap(
+        _build_icon_pixmap(drawer, _ICON_ACTIVE_COLOR),
+        QtGui.QIcon.Mode.Disabled,
+        QtGui.QIcon.State.On,
+    )
+    return icon
+
+
+def _build_single_state_icon(drawer: IconDrawer) -> QtGui.QIcon:
+    icon = QtGui.QIcon()
+    icon.addPixmap(
+        _build_icon_pixmap(drawer, _ICON_NORMAL_COLOR),
+        QtGui.QIcon.Mode.Normal,
+        QtGui.QIcon.State.Off,
+    )
+    icon.addPixmap(
+        _build_icon_pixmap(drawer, _ICON_DISABLED_COLOR),
+        QtGui.QIcon.Mode.Disabled,
+        QtGui.QIcon.State.Off,
+    )
+    return icon
+
+
+def _build_tool_icon(tool: Tool) -> QtGui.QIcon:
+    try:
+        drawer = _ICON_DRAWERS[tool]
+    except KeyError as exc:
+        raise TypeError(f"Unsupported tool icon: {tool!r}") from exc
+    return _build_stateful_icon(drawer)
+
+
+def _build_color_action_icon(color: QtGui.QColor) -> QtGui.QIcon:
+    return _build_single_state_icon(lambda painter: _draw_color_icon(painter, color))
 
 
 class AnnotationCanvas(QtWidgets.QWidget):
@@ -410,6 +500,7 @@ class AnnotationWindow(QtWidgets.QMainWindow):
 
         self._tool_actions: dict[Tool, QtGui.QAction] = {}
         self._toolbar: QtWidgets.QToolBar | None = None
+        self._color_action: QtGui.QAction | None = None
         self._create_toolbar()
         self._apply_toolbar_style()
         self.statusBar().showMessage("Select a tool and annotate the screenshot.")
@@ -435,7 +526,7 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         toolbar = QtWidgets.QToolBar("Tools")
         toolbar.setMovable(False)
         toolbar.setIconSize(QtCore.QSize(24, 24))
-        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.addToolBar(toolbar)
         self._toolbar = toolbar
 
@@ -450,33 +541,41 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         toolbar.addSeparator()
 
         color_action = QtGui.QAction("Color", self)
+        color_action.setIcon(_build_color_action_icon(self.canvas.color))
+        color_action.setToolTip("Color")
         color_action.triggered.connect(self._pick_color)
         toolbar.addAction(color_action)
-
-        self._strength_label = QtWidgets.QLabel("Strength")
-        self._strength_label_action = toolbar.addWidget(self._strength_label)
+        self._color_action = color_action
 
         self._strength_spinbox = QtWidgets.QSpinBox()
+        self._strength_spinbox.setObjectName("strength_spinbox")
         self._strength_spinbox.setRange(2, 32)
         self._strength_spinbox.setSingleStep(1)
         self._strength_spinbox.setValue(self.canvas.current_effect_strength())
+        self._strength_spinbox.setToolTip("Effect strength")
         self._strength_spinbox.valueChanged.connect(
             self.canvas.set_current_effect_strength
         )
         self._strength_spinbox_action = toolbar.addWidget(self._strength_spinbox)
 
         undo_action = QtGui.QAction("Undo", self)
+        undo_action.setIcon(_build_single_state_icon(_draw_undo_icon))
         undo_action.setShortcut(QtGui.QKeySequence.StandardKey.Undo)
+        undo_action.setToolTip("Undo")
         undo_action.triggered.connect(self.canvas.undo)
         toolbar.addAction(undo_action)
 
         copy_action = QtGui.QAction("Copy", self)
+        copy_action.setIcon(_build_single_state_icon(_draw_copy_icon))
         copy_action.setShortcut(QtGui.QKeySequence.StandardKey.Copy)
+        copy_action.setToolTip("Copy")
         copy_action.triggered.connect(self.copy_image)
         toolbar.addAction(copy_action)
 
         save_action = QtGui.QAction("Save", self)
+        save_action.setIcon(_build_single_state_icon(_draw_save_icon))
         save_action.setShortcut(QtGui.QKeySequence.StandardKey.Save)
+        save_action.setToolTip("Save")
         save_action.triggered.connect(self.save_image)
         toolbar.addAction(save_action)
 
@@ -500,9 +599,7 @@ class AnnotationWindow(QtWidgets.QMainWindow):
 
     def _sync_effect_controls(self, tool: Tool) -> None:
         is_effect_tool = tool in {Tool.BLUR, Tool.MOSAIC}
-        self._strength_label_action.setVisible(is_effect_tool)
         self._strength_spinbox_action.setVisible(is_effect_tool)
-        self._strength_label.setVisible(is_effect_tool)
         self._strength_spinbox.setVisible(is_effect_tool)
         if not is_effect_tool:
             return
@@ -529,6 +626,8 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         color = QtWidgets.QColorDialog.getColor(self.canvas.color, self, "Pick Color")
         if color.isValid():
             self.canvas.set_color(color)
+            if self._color_action is not None:
+                self._color_action.setIcon(_build_color_action_icon(color))
             self._apply_toolbar_style()
 
     def copy_image(self) -> None:
