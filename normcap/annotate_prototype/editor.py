@@ -15,6 +15,12 @@ from normcap.annotate_prototype.models import (
 from normcap.annotate_prototype.render import compose_image, draw_annotation
 
 
+class Communicate(QtCore.QObject):
+    """Annotation window communication bus."""
+
+    on_closed = QtCore.Signal()
+
+
 class AnnotationCanvas(QtWidgets.QWidget):
     """Canvas displaying the cropped screenshot and user annotations."""
 
@@ -194,6 +200,8 @@ class AnnotationWindow(QtWidgets.QMainWindow):
 
     def __init__(self, image: QtGui.QImage) -> None:
         super().__init__()
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.com = Communicate(parent=self)
         self.setWindowTitle("NormCap Annotate Prototype")
         self.resize(
             min(max(image.width() + 80, 960), 1600),
@@ -286,3 +294,7 @@ class AnnotationWindow(QtWidgets.QMainWindow):
 
         self.canvas.rendered_image().save(target)
         self.statusBar().showMessage(f"Saved to {target}", 3000)
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # noqa: N802
+        self.com.on_closed.emit()
+        super().closeEvent(event)
