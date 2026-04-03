@@ -52,6 +52,9 @@ Alternative options:
   (Requires [fuse](https://dynobo.github.io/normcap/faqs/#linux-appimage-error-appimages-require-fuse-to-run))
 - [`normcap` @ AUR](https://aur.archlinux.org/packages/normcap) (Arch/Manjaro)
 
+For the Ubuntu annotation prototype workflow on this branch, prefer installing from the
+current checkout with the helper script below instead of using the historical AppImage.
+
 #### macOS
 
 **Note:** You must allow the unsigned application on first start: "System Preferences" →
@@ -191,6 +194,29 @@ Run it from the project root:
 
 ```sh
 uv run normcap-annotate-prototype
+```
+
+On Ubuntu GNOME, you can install the current checkout and bind the default hotkeys in one
+step:
+
+```sh
+./scripts/install_ubuntu_hotkeys.sh
+```
+
+The script will:
+
+- Install the required Ubuntu packages for OCR and clipboard integration
+- Install the current checkout with `uv tool install --editable`
+- Create wrapper commands in `~/.local/bin/`
+- Bind `Ctrl+Alt+A` to the annotation prototype
+- Bind `Ctrl+Alt+O` to the OCR flow
+
+Useful options:
+
+```sh
+./scripts/install_ubuntu_hotkeys.sh --help
+./scripts/install_ubuntu_hotkeys.sh --ocr-languages "eng deu"
+./scripts/install_ubuntu_hotkeys.sh --install-target dist/normcap-0.6.0-py3-none-any.whl
 ```
 
 On GNOME Wayland, multi-monitor capture windows now also use a Qt-native screen
