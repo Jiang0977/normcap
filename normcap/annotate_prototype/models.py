@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtGui
 class Tool(str, Enum):
     """Annotation tools available in the prototype."""
 
+    SELECT = "select"
     PEN = "pen"
     RECTANGLE = "rectangle"
     ARROW = "arrow"

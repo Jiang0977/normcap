@@ -5,7 +5,13 @@ from types import SimpleNamespace
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from normcap.annotate_prototype import app, editor
-from normcap.annotate_prototype.models import EffectAnnotation, NumberAnnotation, Tool
+from normcap.annotate_prototype.models import (
+    ArrowAnnotation,
+    EffectAnnotation,
+    NumberAnnotation,
+    RectangleAnnotation,
+    Tool,
+)
 from normcap.system.models import Rect
 
 
@@ -228,3 +234,418 @@ def test_status_message_updates_with_tool_selection(qtbot) -> None:
     window._tool_actions[Tool.NUMBER].trigger()
 
     assert "Tool: Number" in window.statusBar().currentMessage()
+
+
+def test_select_tool_moves_existing_rectangle_annotation(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.RECTANGLE)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(40, 45))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(40, 45),
+    )
+
+    rectangle = window.canvas.annotations[-1]
+    assert isinstance(rectangle, RectangleAnnotation)
+    assert rectangle.rect.normalized() == QtCore.QRectF(30, 35, 20, 20)
+
+
+def test_delete_key_removes_selected_annotation(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.RECTANGLE)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+    qtbot.keyClick(window.canvas, QtCore.Qt.Key.Key_Delete)
+
+    assert window.canvas.annotations == []
+
+
+def test_select_tool_resizes_rectangle_from_bottom_right_handle(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.RECTANGLE)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(45, 40))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(45, 40),
+    )
+
+    rectangle = window.canvas.annotations[-1]
+    assert isinstance(rectangle, RectangleAnnotation)
+    assert rectangle.rect.normalized() == QtCore.QRectF(10, 10, 35, 30)
+
+
+def test_select_tool_moves_existing_blur_region(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.BLUR)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(35, 40))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(35, 40),
+    )
+
+    effect = window.canvas.annotations[-1]
+    assert isinstance(effect, EffectAnnotation)
+    assert effect.rect.normalized() == QtCore.QRectF(25, 30, 20, 20)
+
+
+def test_select_tool_moves_existing_arrow_annotation(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.ARROW)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(35, 40))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(35, 40),
+    )
+
+    arrow = window.canvas.annotations[-1]
+    assert isinstance(arrow, ArrowAnnotation)
+    assert arrow.start == QtCore.QPointF(25, 30)
+    assert arrow.end == QtCore.QPointF(45, 50)
+
+
+def test_select_tool_resizes_existing_blur_region(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.BLUR)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(45, 40))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(45, 40),
+    )
+
+    effect = window.canvas.annotations[-1]
+    assert isinstance(effect, EffectAnnotation)
+    assert effect.rect.normalized() == QtCore.QRectF(10, 10, 35, 30)
+
+
+def test_select_tool_adjusts_arrow_end_handle(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.ARROW)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(45, 40))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(45, 40),
+    )
+
+    arrow = window.canvas.annotations[-1]
+    assert isinstance(arrow, ArrowAnnotation)
+    assert arrow.start == QtCore.QPointF(10, 10)
+    assert arrow.end == QtCore.QPointF(45, 40)
+
+
+def test_double_click_text_annotation_updates_text(monkeypatch, qtbot) -> None:
+    responses = iter([("Old text", True), ("New text", True)])
+
+    def fake_get_text(*_args, **_kwargs):
+        return next(responses)
+
+    monkeypatch.setattr(
+        editor.QtWidgets.QInputDialog,
+        "getText",
+        staticmethod(fake_get_text),
+    )
+
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.TEXT)
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(15, 25),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mouseDClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(15, 25),
+    )
+
+    text_annotation = window.canvas.annotations[-1]
+    assert text_annotation.text == "New text"
+
+
+def test_double_click_number_annotation_reorders_numbers(monkeypatch, qtbot) -> None:
+    def fake_get_int(*_args, **_kwargs):
+        return (1, True)
+
+    monkeypatch.setattr(
+        editor.QtWidgets.QInputDialog,
+        "getInt",
+        staticmethod(fake_get_int),
+    )
+
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.NUMBER)
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mouseDClick(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+
+    first = window.canvas.annotations[-2]
+    second = window.canvas.annotations[-1]
+    assert isinstance(first, NumberAnnotation)
+    assert isinstance(second, NumberAnnotation)
+    assert first.number == 2
+    assert second.number == 1
+
+
+def test_undo_and_redo_restore_moved_rectangle_annotation(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._select_tool(Tool.RECTANGLE)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(30, 30))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(30, 30),
+    )
+
+    window._select_tool(Tool.SELECT)
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+    qtbot.mouseMove(window.canvas, pos=QtCore.QPoint(35, 40))
+    qtbot.mouseRelease(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(35, 40),
+    )
+
+    moved = window.canvas.annotations[-1]
+    assert isinstance(moved, RectangleAnnotation)
+    assert moved.rect.normalized() == QtCore.QRectF(25, 30, 20, 20)
+
+    window.canvas.undo()
+
+    restored = window.canvas.annotations[-1]
+    assert isinstance(restored, RectangleAnnotation)
+    assert restored.rect.normalized() == QtCore.QRectF(10, 10, 20, 20)
+
+    window.canvas.redo()
+
+    redone = window.canvas.annotations[-1]
+    assert isinstance(redone, RectangleAnnotation)
+    assert redone.rect.normalized() == QtCore.QRectF(25, 30, 20, 20)

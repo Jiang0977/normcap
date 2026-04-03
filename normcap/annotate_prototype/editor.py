@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -68,6 +69,7 @@ _ICON_SIZE = 28
 _ICON_NORMAL_COLOR = QtGui.QColor("#35213f")
 _ICON_ACTIVE_COLOR = QtGui.QColor("white")
 _ICON_DISABLED_COLOR = QtGui.QColor("#9484a0")
+_SELECTION_HANDLE_RADIUS = 8
 
 
 def _tool_accent_color(color: QtGui.QColor) -> str:
@@ -80,6 +82,13 @@ def _draw_pen_icon(painter: QtGui.QPainter) -> None:
     painter.drawLine(6, 21, 15, 12)
     painter.drawLine(15, 12, 22, 5)
     painter.drawEllipse(QtCore.QPointF(7, 21), 1.2, 1.2)
+
+
+def _draw_select_icon(painter: QtGui.QPainter) -> None:
+    painter.drawLine(6, 4, 6, 24)
+    painter.drawLine(6, 4, 20, 14)
+    painter.drawLine(20, 14, 13, 14)
+    painter.drawLine(20, 14, 16, 20)
 
 
 def _draw_rectangle_icon(painter: QtGui.QPainter) -> None:
@@ -143,6 +152,16 @@ def _draw_undo_icon(painter: QtGui.QPainter) -> None:
     painter.drawLine(8.5, 8, 12.8, 12)
 
 
+def _draw_redo_icon(painter: QtGui.QPainter) -> None:
+    path = QtGui.QPainterPath(QtCore.QPointF(8, 19))
+    path.cubicTo(14, 19, 18.5, 18, 19.3, 13.8)
+    path.cubicTo(19.9, 10.4, 17.2, 8, 12.8, 8)
+    path.lineTo(7, 8)
+    painter.drawPath(path)
+    painter.drawLine(19.5, 8, 15.2, 4)
+    painter.drawLine(19.5, 8, 15.2, 12)
+
+
 def _draw_copy_icon(painter: QtGui.QPainter) -> None:
     painter.drawRect(9, 5, 12, 14)
     painter.drawRect(5, 9, 12, 14)
@@ -156,6 +175,7 @@ def _draw_save_icon(painter: QtGui.QPainter) -> None:
 
 
 _ICON_DRAWERS = {
+    Tool.SELECT: _draw_select_icon,
     Tool.PEN: _draw_pen_icon,
     Tool.RECTANGLE: _draw_rectangle_icon,
     Tool.ARROW: _draw_arrow_icon,
@@ -237,6 +257,82 @@ def _build_color_action_icon(color: QtGui.QColor) -> QtGui.QIcon:
     return _build_single_state_icon(lambda painter: _draw_color_icon(painter, color))
 
 
+def _arrow_hit_path(annotation: ArrowAnnotation) -> QtGui.QPainterPath:
+    path = QtGui.QPainterPath(annotation.start)
+    path.lineTo(annotation.end)
+    stroker = QtGui.QPainterPathStroker()
+    stroker.setWidth(max(12, annotation.width + 6))
+    stroker.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+    stroker.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
+    return stroker.createStroke(path)
+
+
+def _text_annotation_rect(annotation: TextAnnotation) -> QtCore.QRectF:
+    font = QtGui.QFont()
+    font.setPointSize(annotation.font_size)
+    font.setBold(True)
+    metrics = QtGui.QFontMetricsF(font)
+    rect = metrics.tightBoundingRect(annotation.text)
+    rect.translate(annotation.position)
+    return rect.adjusted(-4, -4, 4, 4)
+
+
+def _clone_annotation(annotation: Annotation) -> Annotation:
+    if isinstance(annotation, StrokeAnnotation):
+        return StrokeAnnotation(
+            points=[QtCore.QPointF(point) for point in annotation.points],
+            color=QtGui.QColor(annotation.color),
+            width=annotation.width,
+        )
+
+    if isinstance(annotation, RectangleAnnotation):
+        return RectangleAnnotation(
+            rect=QtCore.QRectF(annotation.rect),
+            color=QtGui.QColor(annotation.color),
+            width=annotation.width,
+        )
+
+    if isinstance(annotation, ArrowAnnotation):
+        return ArrowAnnotation(
+            start=QtCore.QPointF(annotation.start),
+            end=QtCore.QPointF(annotation.end),
+            color=QtGui.QColor(annotation.color),
+            width=annotation.width,
+        )
+
+    if isinstance(annotation, TextAnnotation):
+        return TextAnnotation(
+            position=QtCore.QPointF(annotation.position),
+            text=annotation.text,
+            color=QtGui.QColor(annotation.color),
+            font_size=annotation.font_size,
+        )
+
+    if isinstance(annotation, NumberAnnotation):
+        return NumberAnnotation(
+            position=QtCore.QPointF(annotation.position),
+            number=annotation.number,
+            color=QtGui.QColor(annotation.color),
+            radius=annotation.radius,
+            width=annotation.width,
+        )
+
+    if isinstance(annotation, EffectAnnotation):
+        return EffectAnnotation(
+            rect=QtCore.QRectF(annotation.rect),
+            effect=annotation.effect,
+            strength=annotation.strength,
+            color=QtGui.QColor(annotation.color),
+            width=annotation.width,
+        )
+
+    raise TypeError(f"Unsupported annotation type: {type(annotation)!r}")
+
+
+def _clone_annotations(annotations: list[Annotation]) -> list[Annotation]:
+    return [_clone_annotation(annotation) for annotation in annotations]
+
+
 class AnnotationCanvas(QtWidgets.QWidget):
     """Canvas displaying the cropped screenshot and user annotations."""
 
@@ -254,9 +350,18 @@ class AnnotationCanvas(QtWidgets.QWidget):
         self._stroke_points: list[QtCore.QPointF] | None = None
         self._drag_start: QtCore.QPointF | None = None
         self._drag_end: QtCore.QPointF | None = None
+        self._selected_index: int | None = None
+        self._selection_drag_origin: QtCore.QPointF | None = None
+        self._selection_origin_annotation: Annotation | None = None
+        self._selection_mode: str | None = None
+        self._selection_snapshot: list[Annotation] | None = None
+        self._selection_history_committed = False
+        self._undo_stack: list[list[Annotation]] = []
+        self._redo_stack: list[list[Annotation]] = []
 
         self.setMouseTracking(True)
         self.setCursor(QtCore.Qt.CursorShape.CrossCursor)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.setFixedSize(self._base_image.size())
 
     @property
@@ -265,6 +370,14 @@ class AnnotationCanvas(QtWidgets.QWidget):
 
     def set_tool(self, tool: Tool) -> None:
         self.tool = tool
+        if tool != Tool.SELECT:
+            self._selected_index = None
+            self._selection_drag_origin = None
+            self._selection_origin_annotation = None
+            self._selection_mode = None
+            self._selection_snapshot = None
+            self._selection_history_committed = False
+            self.update()
 
     def set_color(self, color: QtGui.QColor) -> None:
         self.color = color
@@ -285,9 +398,51 @@ class AnnotationCanvas(QtWidgets.QWidget):
         self.update()
 
     def undo(self) -> None:
-        if self.annotations:
-            self.annotations.pop()
-            self.update()
+        if not self._undo_stack:
+            return
+
+        self._redo_stack.append(_clone_annotations(self.annotations))
+        self.annotations = _clone_annotations(self._undo_stack.pop())
+        self._selected_index = None
+        self._selection_drag_origin = None
+        self._selection_origin_annotation = None
+        self._selection_mode = None
+        self._selection_snapshot = None
+        self._selection_history_committed = False
+        self.update()
+
+    def redo(self) -> None:
+        if not self._redo_stack:
+            return
+
+        self._undo_stack.append(_clone_annotations(self.annotations))
+        self.annotations = _clone_annotations(self._redo_stack.pop())
+        self._selected_index = None
+        self._selection_drag_origin = None
+        self._selection_origin_annotation = None
+        self._selection_mode = None
+        self._selection_snapshot = None
+        self._selection_history_committed = False
+        self.update()
+
+    def _record_history(self, snapshot: list[Annotation] | None = None) -> None:
+        state = self.annotations if snapshot is None else snapshot
+        self._undo_stack.append(_clone_annotations(state))
+        self._redo_stack.clear()
+
+    def _record_selection_history_if_needed(self, position: QtCore.QPointF) -> None:
+        if (
+            self._selection_snapshot is None
+            or self._selection_history_committed
+            or self._selection_drag_origin is None
+        ):
+            return
+
+        if QtCore.QLineF(position, self._selection_drag_origin).length() == 0:
+            return
+
+        self._record_history(self._selection_snapshot)
+        self._selection_history_committed = True
 
     def rendered_image(self) -> QtGui.QImage:
         return compose_image(self._base_image, self.annotations)
@@ -341,6 +496,236 @@ class AnnotationCanvas(QtWidgets.QWidget):
             image = apply_effect_annotation(image=image, annotation=preview)
         return image
 
+    def _annotation_at(self, position: QtCore.QPointF) -> int | None:
+        for index in range(len(self.annotations) - 1, -1, -1):
+            annotation = self.annotations[index]
+            if isinstance(annotation, (RectangleAnnotation, EffectAnnotation)) and (
+                annotation.rect.normalized().adjusted(-4, -4, 4, 4).contains(position)
+            ):
+                return index
+            if isinstance(annotation, ArrowAnnotation) and _arrow_hit_path(
+                annotation
+            ).contains(position):
+                return index
+            if isinstance(annotation, TextAnnotation) and _text_annotation_rect(
+                annotation
+            ).contains(position):
+                return index
+            if isinstance(annotation, NumberAnnotation) and (
+                QtCore.QLineF(position, annotation.position).length()
+                <= annotation.radius + 4
+            ):
+                return index
+        return None
+
+    def _annotation_handles(self, annotation: Annotation) -> dict[str, QtCore.QPointF]:
+        if isinstance(annotation, (RectangleAnnotation, EffectAnnotation)):
+            rect = annotation.rect.normalized()
+            return {
+                "resize_top_left": rect.topLeft(),
+                "resize_top_right": rect.topRight(),
+                "resize_bottom_left": rect.bottomLeft(),
+                "resize_bottom_right": rect.bottomRight(),
+            }
+
+        if isinstance(annotation, ArrowAnnotation):
+            return {
+                "move_start": annotation.start,
+                "move_end": annotation.end,
+            }
+
+        return {}
+
+    def _selected_handle_at(self, position: QtCore.QPointF) -> str | None:
+        if self._selected_index is None:
+            return None
+
+        annotation = self.annotations[self._selected_index]
+        for handle, point in self._annotation_handles(annotation).items():
+            if QtCore.QLineF(position, point).length() <= _SELECTION_HANDLE_RADIUS:
+                return handle
+        return None
+
+    def _drag_rect_like_annotation(
+        self,
+        annotation: RectangleAnnotation | EffectAnnotation,
+        position: QtCore.QPointF,
+        delta: QtCore.QPointF,
+    ) -> bool:
+        if self._selected_index is None:
+            return False
+
+        if self._selection_mode == "move":
+            rect = QtCore.QRectF(annotation.rect)
+            rect.translate(delta)
+            self.annotations[self._selected_index] = replace(annotation, rect=rect)
+            self.update()
+            return True
+
+        rect = annotation.rect.normalized()
+        if self._selection_mode == "resize_top_left":
+            rect.setTopLeft(position)
+        elif self._selection_mode == "resize_top_right":
+            rect.setTopRight(position)
+        elif self._selection_mode == "resize_bottom_left":
+            rect.setBottomLeft(position)
+        elif self._selection_mode == "resize_bottom_right":
+            rect.setBottomRight(position)
+        else:
+            return False
+
+        self.annotations[self._selected_index] = replace(annotation, rect=rect)
+        self.update()
+        return True
+
+    def _drag_arrow_annotation(
+        self,
+        annotation: ArrowAnnotation,
+        position: QtCore.QPointF,
+        delta: QtCore.QPointF,
+    ) -> bool:
+        if self._selected_index is None:
+            return False
+
+        if self._selection_mode == "move":
+            self.annotations[self._selected_index] = replace(
+                annotation,
+                start=annotation.start + delta,
+                end=annotation.end + delta,
+            )
+            self.update()
+            return True
+
+        if self._selection_mode == "move_start":
+            self.annotations[self._selected_index] = replace(
+                annotation,
+                start=position,
+            )
+            self.update()
+            return True
+
+        if self._selection_mode == "move_end":
+            self.annotations[self._selected_index] = replace(
+                annotation,
+                end=position,
+            )
+            self.update()
+            return True
+
+        return False
+
+    def _drag_selected_annotation(self, position: QtCore.QPointF) -> None:
+        if (
+            self._selected_index is None
+            or self._selection_drag_origin is None
+            or self._selection_origin_annotation is None
+            or self._selection_mode is None
+        ):
+            return
+
+        annotation = self._selection_origin_annotation
+        delta = position - self._selection_drag_origin
+        self._record_selection_history_if_needed(position)
+
+        if isinstance(annotation, (RectangleAnnotation, EffectAnnotation)) and (
+            self._drag_rect_like_annotation(annotation, position, delta)
+        ):
+            return
+
+        if isinstance(annotation, ArrowAnnotation) and self._drag_arrow_annotation(
+            annotation, position, delta
+        ):
+            return
+
+        if self._selection_mode is None:
+            return
+
+    def _edit_text_annotation(self, index: int, annotation: TextAnnotation) -> None:
+        text, accepted = QtWidgets.QInputDialog.getText(
+            self,
+            "Edit Text",
+            "Text:",
+            text=annotation.text,
+        )
+        if accepted and text.strip() and text.strip() != annotation.text:
+            self._record_history()
+            self.annotations[index] = replace(annotation, text=text.strip())
+            self.update()
+
+    def _reorder_number_annotation(self, index: int, target_number: int) -> None:
+        number_indices = [
+            annotation_index
+            for annotation_index, current in enumerate(self.annotations)
+            if isinstance(current, NumberAnnotation)
+        ]
+        if index not in number_indices:
+            return
+
+        current_position = number_indices.index(index)
+        target_position = max(0, min(len(number_indices) - 1, target_number - 1))
+        annotation_index = number_indices.pop(current_position)
+        number_indices.insert(target_position, annotation_index)
+
+        for number, annotation_index in enumerate(number_indices, start=1):
+            current = self.annotations[annotation_index]
+            if not isinstance(current, NumberAnnotation):
+                continue
+            self.annotations[annotation_index] = replace(current, number=number)
+
+    def _edit_number_annotation(
+        self, index: int, annotation: NumberAnnotation
+    ) -> None:
+        number_count = sum(
+            isinstance(current, NumberAnnotation) for current in self.annotations
+        )
+        target_number, accepted = QtWidgets.QInputDialog.getInt(
+            self,
+            "Reorder Number",
+            "Number:",
+            annotation.number,
+            1,
+            number_count,
+        )
+        if not accepted:
+            return
+
+        if target_number == annotation.number:
+            return
+
+        self._record_history()
+        self._reorder_number_annotation(index, target_number)
+        self.update()
+
+    def _begin_selection_interaction(self, position: QtCore.QPointF) -> bool:
+        handle = self._selected_handle_at(position)
+        if handle is not None and self._selected_index is not None:
+            self._selection_drag_origin = position
+            self._selection_origin_annotation = self.annotations[self._selected_index]
+            self._selection_mode = handle
+            self._selection_snapshot = _clone_annotations(self.annotations)
+            self._selection_history_committed = False
+            self.update()
+            return True
+
+        hit_index = self._annotation_at(position)
+        self._selected_index = hit_index
+        if hit_index is None:
+            self._selection_drag_origin = None
+            self._selection_origin_annotation = None
+            self._selection_mode = None
+            self._selection_snapshot = None
+            self._selection_history_committed = False
+            self.update()
+            return True
+
+        self._selection_drag_origin = position
+        self._selection_origin_annotation = self.annotations[hit_index]
+        self._selection_mode = "move"
+        self._selection_snapshot = _clone_annotations(self.annotations)
+        self._selection_history_committed = False
+        self.update()
+        return True
+
     def _paint_preview(self, painter: QtGui.QPainter) -> None:
         preview = self.current_preview_annotation()
         if preview is None:
@@ -360,12 +745,58 @@ class AnnotationCanvas(QtWidgets.QWidget):
         self._paint_preview(painter)
         painter.end()
 
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:  # noqa: N802
+        if (
+            self.tool == Tool.SELECT
+            and self._selected_index is not None
+            and event.key()
+            in {QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace}
+        ):
+            self._record_history()
+            self.annotations.pop(self._selected_index)
+            self._selected_index = None
+            self._selection_drag_origin = None
+            self._selection_origin_annotation = None
+            self._selection_mode = None
+            self._selection_snapshot = None
+            self._selection_history_committed = False
+            self.update()
+            event.accept()
+            return
+
+        super().keyPressEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
+        super().mouseDoubleClickEvent(event)
+        if (
+            self.tool != Tool.SELECT
+            or event.button() != QtCore.Qt.MouseButton.LeftButton
+        ):
+            return
+
+        index = self._annotation_at(event.position())
+        if index is None:
+            return
+
+        self._selected_index = index
+        annotation = self.annotations[index]
+        if isinstance(annotation, TextAnnotation):
+            self._edit_text_annotation(index, annotation)
+            return
+
+        if isinstance(annotation, NumberAnnotation):
+            self._edit_number_annotation(index, annotation)
+
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802
         super().mousePressEvent(event)
         if event.button() != QtCore.Qt.MouseButton.LeftButton:
             return
 
+        self.setFocus(QtCore.Qt.FocusReason.MouseFocusReason)
         position = event.position()
+        if self.tool == Tool.SELECT and self._begin_selection_interaction(position):
+            return
+
         if self.tool == Tool.PEN:
             self._stroke_points = [position]
             return
@@ -377,6 +808,7 @@ class AnnotationCanvas(QtWidgets.QWidget):
                 "Text:",
             )
             if accepted and text.strip():
+                self._record_history()
                 self.annotations.append(
                     TextAnnotation(
                         position=position,
@@ -392,6 +824,7 @@ class AnnotationCanvas(QtWidgets.QWidget):
             next_number = (
                 sum(isinstance(a, NumberAnnotation) for a in self.annotations) + 1
             )
+            self._record_history()
             self.annotations.append(
                 NumberAnnotation(
                     position=position,
@@ -415,6 +848,10 @@ class AnnotationCanvas(QtWidgets.QWidget):
             self.update()
             return
 
+        if self.tool == Tool.SELECT:
+            self._drag_selected_annotation(position)
+            return
+
         if self._drag_start is not None:
             self._drag_end = position
             self.update()
@@ -426,8 +863,18 @@ class AnnotationCanvas(QtWidgets.QWidget):
 
         position = event.position()
 
+        if self.tool == Tool.SELECT:
+            self._drag_selected_annotation(position)
+            self._selection_drag_origin = None
+            self._selection_origin_annotation = None
+            self._selection_mode = None
+            self._selection_snapshot = None
+            self._selection_history_committed = False
+            return
+
         if self._stroke_points is not None:
             self._stroke_points.append(position)
+            self._record_history()
             self.annotations.append(
                 StrokeAnnotation(
                     points=self._stroke_points.copy(),
@@ -444,6 +891,7 @@ class AnnotationCanvas(QtWidgets.QWidget):
 
         self._drag_end = position
         if self.tool == Tool.RECTANGLE:
+            self._record_history()
             self.annotations.append(
                 RectangleAnnotation(
                     rect=QtCore.QRectF(self._drag_start, self._drag_end),
@@ -455,6 +903,7 @@ class AnnotationCanvas(QtWidgets.QWidget):
             strength = (
                 self.blur_strength if self.tool == Tool.BLUR else self.mosaic_strength
             )
+            self._record_history()
             self.annotations.append(
                 EffectAnnotation(
                     rect=QtCore.QRectF(self._drag_start, self._drag_end),
@@ -465,6 +914,7 @@ class AnnotationCanvas(QtWidgets.QWidget):
                 )
             )
         elif self.tool == Tool.ARROW:
+            self._record_history()
             self.annotations.append(
                 ArrowAnnotation(
                     start=self._drag_start,
@@ -522,14 +972,8 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         toolbar.addAction(action)
         self._tool_actions[tool] = action
 
-    def _create_toolbar(self) -> None:
-        toolbar = QtWidgets.QToolBar("Tools")
-        toolbar.setMovable(False)
-        toolbar.setIconSize(QtCore.QSize(24, 24))
-        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
-        self.addToolBar(toolbar)
-        self._toolbar = toolbar
-
+    def _add_annotation_tool_actions(self, toolbar: QtWidgets.QToolBar) -> None:
+        self._add_tool_action(toolbar, "Select", Tool.SELECT, "V")
         self._add_tool_action(toolbar, "Pen", Tool.PEN, "P")
         self._add_tool_action(toolbar, "Rectangle", Tool.RECTANGLE, "R")
         self._add_tool_action(toolbar, "Arrow", Tool.ARROW, "A")
@@ -538,8 +982,23 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         self._add_tool_action(toolbar, "Blur", Tool.BLUR, "B")
         self._add_tool_action(toolbar, "Mosaic", Tool.MOSAIC, "M")
 
-        toolbar.addSeparator()
+    def _create_toolbar_action(
+        self,
+        text: str,
+        icon_drawer: IconDrawer,
+        shortcut: QtGui.QKeySequence.StandardKey | None,
+        tooltip: str,
+        handler: Callable[[], None],
+    ) -> QtGui.QAction:
+        action = QtGui.QAction(text, self)
+        action.setIcon(_build_single_state_icon(icon_drawer))
+        action.setToolTip(tooltip)
+        if shortcut is not None:
+            action.setShortcut(shortcut)
+        action.triggered.connect(handler)
+        return action
 
+    def _add_toolbar_utility_actions(self, toolbar: QtWidgets.QToolBar) -> None:
         color_action = QtGui.QAction("Color", self)
         color_action.setIcon(_build_color_action_icon(self.canvas.color))
         color_action.setToolTip("Color")
@@ -558,26 +1017,55 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         )
         self._strength_spinbox_action = toolbar.addWidget(self._strength_spinbox)
 
-        undo_action = QtGui.QAction("Undo", self)
-        undo_action.setIcon(_build_single_state_icon(_draw_undo_icon))
-        undo_action.setShortcut(QtGui.QKeySequence.StandardKey.Undo)
-        undo_action.setToolTip("Undo")
-        undo_action.triggered.connect(self.canvas.undo)
-        toolbar.addAction(undo_action)
+        toolbar.addAction(
+            self._create_toolbar_action(
+                text="Undo",
+                icon_drawer=_draw_undo_icon,
+                shortcut=QtGui.QKeySequence.StandardKey.Undo,
+                tooltip="Undo",
+                handler=self.canvas.undo,
+            )
+        )
+        toolbar.addAction(
+            self._create_toolbar_action(
+                text="Redo",
+                icon_drawer=_draw_redo_icon,
+                shortcut=QtGui.QKeySequence.StandardKey.Redo,
+                tooltip="Redo",
+                handler=self.canvas.redo,
+            )
+        )
+        toolbar.addAction(
+            self._create_toolbar_action(
+                text="Copy",
+                icon_drawer=_draw_copy_icon,
+                shortcut=QtGui.QKeySequence.StandardKey.Copy,
+                tooltip="Copy",
+                handler=self.copy_image,
+            )
+        )
+        toolbar.addAction(
+            self._create_toolbar_action(
+                text="Save",
+                icon_drawer=_draw_save_icon,
+                shortcut=QtGui.QKeySequence.StandardKey.Save,
+                tooltip="Save",
+                handler=self.save_image,
+            )
+        )
 
-        copy_action = QtGui.QAction("Copy", self)
-        copy_action.setIcon(_build_single_state_icon(_draw_copy_icon))
-        copy_action.setShortcut(QtGui.QKeySequence.StandardKey.Copy)
-        copy_action.setToolTip("Copy")
-        copy_action.triggered.connect(self.copy_image)
-        toolbar.addAction(copy_action)
+    def _create_toolbar(self) -> None:
+        toolbar = QtWidgets.QToolBar("Tools")
+        toolbar.setMovable(False)
+        toolbar.setIconSize(QtCore.QSize(24, 24))
+        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.addToolBar(toolbar)
+        self._toolbar = toolbar
 
-        save_action = QtGui.QAction("Save", self)
-        save_action.setIcon(_build_single_state_icon(_draw_save_icon))
-        save_action.setShortcut(QtGui.QKeySequence.StandardKey.Save)
-        save_action.setToolTip("Save")
-        save_action.triggered.connect(self.save_image)
-        toolbar.addAction(save_action)
+        self._add_annotation_tool_actions(toolbar)
+
+        toolbar.addSeparator()
+        self._add_toolbar_utility_actions(toolbar)
 
         self._select_tool(Tool.PEN)
 
@@ -610,6 +1098,7 @@ class AnnotationWindow(QtWidgets.QMainWindow):
 
     def _update_status(self, tool: Tool) -> None:
         descriptions = {
+            Tool.SELECT: "Select and move annotations",
             Tool.PEN: "Freehand drawing",
             Tool.RECTANGLE: "Draw rectangles",
             Tool.ARROW: "Draw arrows",
