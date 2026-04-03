@@ -8,6 +8,7 @@ from normcap.annotate_prototype.models import (
     Annotation,
     ArrowAnnotation,
     EffectAnnotation,
+    NumberAnnotation,
     RectangleAnnotation,
     StrokeAnnotation,
     TextAnnotation,
@@ -57,6 +58,20 @@ class AnnotationCanvas(QtWidgets.QWidget):
 
     def set_color(self, color: QtGui.QColor) -> None:
         self.color = color
+        self.update()
+
+    def current_effect_strength(self) -> int:
+        if self.tool == Tool.BLUR:
+            return self.blur_strength
+        if self.tool == Tool.MOSAIC:
+            return self.mosaic_strength
+        return self.blur_strength
+
+    def set_current_effect_strength(self, value: int) -> None:
+        if self.tool == Tool.MOSAIC:
+            self.mosaic_strength = value
+        else:
+            self.blur_strength = value
         self.update()
 
     def undo(self) -> None:
@@ -161,6 +176,22 @@ class AnnotationCanvas(QtWidgets.QWidget):
                     )
                 )
                 self.update()
+            return
+
+        if self.tool == Tool.NUMBER:
+            next_number = (
+                sum(isinstance(a, NumberAnnotation) for a in self.annotations) + 1
+            )
+            self.annotations.append(
+                NumberAnnotation(
+                    position=position,
+                    number=next_number,
+                    color=QtGui.QColor(self.color),
+                    radius=18,
+                    width=max(2, self.stroke_width - 1),
+                )
+            )
+            self.update()
             return
 
         self._drag_start = position
@@ -289,6 +320,7 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         self._add_tool_action(toolbar, "Rectangle", Tool.RECTANGLE, "R")
         self._add_tool_action(toolbar, "Arrow", Tool.ARROW, "A")
         self._add_tool_action(toolbar, "Text", Tool.TEXT, "T")
+        self._add_tool_action(toolbar, "Number", Tool.NUMBER, "N")
         self._add_tool_action(toolbar, "Blur", Tool.BLUR, "B")
         self._add_tool_action(toolbar, "Mosaic", Tool.MOSAIC, "M")
 
@@ -297,11 +329,25 @@ class AnnotationWindow(QtWidgets.QMainWindow):
 
         self._tool_actions[Tool.PEN].setChecked(True)
 
+        self._effect_action_group = action_group
+
         toolbar.addSeparator()
 
         color_action = QtGui.QAction("Color", self)
         color_action.triggered.connect(self._pick_color)
         toolbar.addAction(color_action)
+
+        self._strength_label = QtWidgets.QLabel("Strength")
+        toolbar.addWidget(self._strength_label)
+
+        self._strength_spinbox = QtWidgets.QSpinBox()
+        self._strength_spinbox.setRange(2, 32)
+        self._strength_spinbox.setSingleStep(1)
+        self._strength_spinbox.setValue(self.canvas.current_effect_strength())
+        self._strength_spinbox.valueChanged.connect(
+            self.canvas.set_current_effect_strength
+        )
+        toolbar.addWidget(self._strength_spinbox)
 
         undo_action = QtGui.QAction("Undo", self)
         undo_action.setShortcut(QtGui.QKeySequence.StandardKey.Undo)
@@ -317,6 +363,24 @@ class AnnotationWindow(QtWidgets.QMainWindow):
         save_action.setShortcut(QtGui.QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self.save_image)
         toolbar.addAction(save_action)
+
+        for tool, action in self._tool_actions.items():
+            action.triggered.connect(
+                lambda checked, selected=tool: checked
+                and self._sync_effect_controls(selected)
+            )
+        self._sync_effect_controls(Tool.PEN)
+
+    def _sync_effect_controls(self, tool: Tool) -> None:
+        is_effect_tool = tool in {Tool.BLUR, Tool.MOSAIC}
+        self._strength_label.setVisible(is_effect_tool)
+        self._strength_spinbox.setVisible(is_effect_tool)
+        if not is_effect_tool:
+            return
+
+        self._strength_spinbox.blockSignals(True)
+        self._strength_spinbox.setValue(self.canvas.current_effect_strength())
+        self._strength_spinbox.blockSignals(False)
 
     def _pick_color(self) -> None:
         color = QtWidgets.QColorDialog.getColor(self.canvas.color, self, "Pick Color")

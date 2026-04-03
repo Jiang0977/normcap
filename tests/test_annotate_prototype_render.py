@@ -3,6 +3,7 @@ from PySide6 import QtCore, QtGui
 from normcap.annotate_prototype.models import (
     ArrowAnnotation,
     EffectAnnotation,
+    NumberAnnotation,
     RectangleAnnotation,
     Tool,
 )
@@ -105,3 +106,23 @@ def test_compose_image_applies_blur_effect() -> None:
     )
 
     assert _changed_pixels(image, result, 4, 4, 15, 15) > 0
+
+
+def test_compose_image_draws_number_annotation(qapp) -> None:
+    image = QtGui.QImage(40, 40, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    result = compose_image(
+        base_image=image,
+        annotations=[
+            NumberAnnotation(
+                position=QtCore.QPointF(20, 20),
+                number=3,
+                color=QtGui.QColor("red"),
+                radius=12,
+                width=2,
+            )
+        ],
+    )
+
+    assert result.pixelColor(20, 20) != QtGui.QColor("white")

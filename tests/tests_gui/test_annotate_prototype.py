@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from PySide6 import QtCore, QtGui
 
 from normcap.annotate_prototype import app, editor
-from normcap.annotate_prototype.models import EffectAnnotation, Tool
+from normcap.annotate_prototype.models import EffectAnnotation, NumberAnnotation, Tool
 from normcap.system.models import Rect
 
 
@@ -91,6 +91,54 @@ def test_blur_tool_creates_effect_annotation(qtbot) -> None:
 
     assert isinstance(window.canvas.annotations[-1], EffectAnnotation)
     assert window.canvas.annotations[-1].effect == Tool.BLUR
+
+
+def test_number_tool_creates_sequential_annotations(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.canvas.set_tool(Tool.NUMBER)
+
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(10, 10),
+    )
+    qtbot.mousePress(
+        window.canvas,
+        QtCore.Qt.MouseButton.LeftButton,
+        pos=QtCore.QPoint(20, 20),
+    )
+
+    first = window.canvas.annotations[-2]
+    second = window.canvas.annotations[-1]
+    assert isinstance(first, NumberAnnotation)
+    assert isinstance(second, NumberAnnotation)
+    assert first.number == 1
+    assert second.number == 2
+
+
+def test_effect_strength_control_tracks_active_tool(qtbot) -> None:
+    image = QtGui.QImage(80, 60, QtGui.QImage.Format.Format_ARGB32)
+    image.fill(QtGui.QColor("white"))
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.show()
+
+    window._tool_actions[Tool.BLUR].trigger()
+    window._strength_spinbox.setValue(7)
+    assert window.canvas.blur_strength == 7
+
+    window._tool_actions[Tool.MOSAIC].trigger()
+    assert window._strength_spinbox.isVisible() is True
+    window._strength_spinbox.setValue(13)
+    assert window.canvas.mosaic_strength == 13
+
+    window._tool_actions[Tool.PEN].trigger()
+    assert window._strength_spinbox.isVisible() is False
 
 
 def test_effect_preview_changes_display_image(qtbot) -> None:
