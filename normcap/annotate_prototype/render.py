@@ -140,6 +140,15 @@ def _normalized_image_rect(
     return qrect
 
 
+def apply_effect_annotation(
+    image: QtGui.QImage, annotation: EffectAnnotation
+) -> QtGui.QImage:
+    """Apply an effect annotation directly onto a copy of the given image."""
+    result = image.copy()
+    _draw_effect_annotation(result, annotation)
+    return result
+
+
 def _draw_effect_annotation(image: QtGui.QImage, annotation: EffectAnnotation) -> None:
     target_rect = _normalized_image_rect(image=image, rect=annotation.rect)
     if target_rect is None:
@@ -194,7 +203,7 @@ def compose_image(
     for annotation in annotations:
         if isinstance(annotation, EffectAnnotation):
             painter.end()
-            _draw_effect_annotation(image=image, annotation=annotation)
+            image = apply_effect_annotation(image=image, annotation=annotation)
             painter = QtGui.QPainter(image)
             painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
             continue

@@ -9,6 +9,22 @@ from normcap.annotate_prototype.models import EffectAnnotation, Tool
 from normcap.system.models import Rect
 
 
+def _changed_pixels(
+    before: QtGui.QImage,
+    after: QtGui.QImage,
+    left: int,
+    top: int,
+    right: int,
+    bottom: int,
+) -> int:
+    changed = 0
+    for y in range(top, bottom + 1):
+        for x in range(left, right + 1):
+            if before.pixelColor(x, y) != after.pixelColor(x, y):
+                changed += 1
+    return changed
+
+
 def test_open_annotation_window_is_scheduled(monkeypatch) -> None:
     calls: dict[str, object] = {}
 
@@ -75,3 +91,21 @@ def test_blur_tool_creates_effect_annotation(qtbot) -> None:
 
     assert isinstance(window.canvas.annotations[-1], EffectAnnotation)
     assert window.canvas.annotations[-1].effect == Tool.BLUR
+
+
+def test_effect_preview_changes_display_image(qtbot) -> None:
+    image = QtGui.QImage(40, 40, QtGui.QImage.Format.Format_ARGB32)
+    for y in range(40):
+        for x in range(40):
+            color = QtGui.QColor("black") if (x + y) % 2 == 0 else QtGui.QColor("white")
+            image.setPixelColor(x, y, color)
+
+    window = editor.AnnotationWindow(image)
+    qtbot.add_widget(window)
+    window.canvas.set_tool(Tool.MOSAIC)
+    window.canvas._drag_start = QtCore.QPointF(8, 8)
+    window.canvas._drag_end = QtCore.QPointF(24, 24)
+
+    display = window.canvas.display_image()
+
+    assert _changed_pixels(image, display, 8, 8, 24, 24) > 0

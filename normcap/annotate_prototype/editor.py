@@ -13,7 +13,11 @@ from normcap.annotate_prototype.models import (
     TextAnnotation,
     Tool,
 )
-from normcap.annotate_prototype.render import compose_image, draw_annotation
+from normcap.annotate_prototype.render import (
+    apply_effect_annotation,
+    compose_image,
+    draw_annotation,
+)
 
 
 class Communicate(QtCore.QObject):
@@ -63,62 +67,71 @@ class AnnotationCanvas(QtWidgets.QWidget):
     def rendered_image(self) -> QtGui.QImage:
         return compose_image(self._base_image, self.annotations)
 
-    def _paint_preview(self, painter: QtGui.QPainter) -> None:
+    def current_preview_annotation(self) -> Annotation | None:
+        """Build the annotation currently being previewed while dragging."""
         if self._stroke_points:
-            draw_annotation(
-                painter,
-                StrokeAnnotation(
-                    points=self._stroke_points.copy(),
-                    color=QtGui.QColor(self.color),
-                    width=self.stroke_width,
-                ),
+            return StrokeAnnotation(
+                points=self._stroke_points.copy(),
+                color=QtGui.QColor(self.color),
+                width=self.stroke_width,
             )
-            return
 
         if self._drag_start is None or self._drag_end is None:
-            return
+            return None
 
         if self.tool == Tool.RECTANGLE:
-            draw_annotation(
-                painter,
-                RectangleAnnotation(
-                    rect=QtCore.QRectF(self._drag_start, self._drag_end),
-                    color=QtGui.QColor(self.color),
-                    width=self.stroke_width,
-                ),
+            return RectangleAnnotation(
+                rect=QtCore.QRectF(self._drag_start, self._drag_end),
+                color=QtGui.QColor(self.color),
+                width=self.stroke_width,
             )
-        elif self.tool in {Tool.BLUR, Tool.MOSAIC}:
+
+        if self.tool in {Tool.BLUR, Tool.MOSAIC}:
             strength = (
                 self.blur_strength if self.tool == Tool.BLUR else self.mosaic_strength
             )
-            draw_annotation(
-                painter,
-                EffectAnnotation(
-                    rect=QtCore.QRectF(self._drag_start, self._drag_end),
-                    effect=self.tool,
-                    strength=strength,
-                    color=QtGui.QColor(self.color),
-                    width=max(2, self.stroke_width - 1),
-                ),
+            return EffectAnnotation(
+                rect=QtCore.QRectF(self._drag_start, self._drag_end),
+                effect=self.tool,
+                strength=strength,
+                color=QtGui.QColor(self.color),
+                width=max(2, self.stroke_width - 1),
             )
-        elif self.tool == Tool.ARROW:
-            draw_annotation(
-                painter,
-                ArrowAnnotation(
-                    start=self._drag_start,
-                    end=self._drag_end,
-                    color=QtGui.QColor(self.color),
-                    width=self.stroke_width,
-                ),
+
+        if self.tool == Tool.ARROW:
+            return ArrowAnnotation(
+                start=self._drag_start,
+                end=self._drag_end,
+                color=QtGui.QColor(self.color),
+                width=self.stroke_width,
             )
+
+        return None
+
+    def display_image(self) -> QtGui.QImage:
+        """Build the image currently shown on the canvas, including effect previews."""
+        image = self.rendered_image()
+        preview = self.current_preview_annotation()
+        if isinstance(preview, EffectAnnotation):
+            image = apply_effect_annotation(image=image, annotation=preview)
+        return image
+
+    def _paint_preview(self, painter: QtGui.QPainter) -> None:
+        preview = self.current_preview_annotation()
+        if preview is None:
+            return
+
+        if isinstance(preview, EffectAnnotation):
+            draw_annotation(painter, preview)
+            return
+
+        draw_annotation(painter, preview)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # noqa: N802
         super().paintEvent(event)
         painter = QtGui.QPainter(self)
-        painter.drawImage(0, 0, self._base_image)
+        painter.drawImage(0, 0, self.display_image())
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-        for annotation in self.annotations:
-            draw_annotation(painter, annotation)
         self._paint_preview(painter)
         painter.end()
 
