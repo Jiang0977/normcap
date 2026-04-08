@@ -15,6 +15,14 @@
 - Add clickable desktop notifications in FlatPak package.
 - Add a new clipboard-handler `qt_wayland` to improve reliabilty of writing to clipboard on Wayland systems.
 
+## v0.6.1 (2026-04-08)
+
+**Linux:**
+- Add a reproducible Ubuntu 24.04 `.deb` packaging path for the current checkout.
+- Fix GNOME X11 screenshot capture by preferring `gnome-screenshot` over Qt on that session type.
+- Fix `gnome-screenshot` handling when the target file must exist ahead of time or when the command returns a non-zero exit code despite producing a readable image.
+- Fix splitting full-desktop screenshots on mixed-scale X11 multi-monitor setups.
+
 ## v0.6.0 (2025-08-31)
 
 **All systems:**
