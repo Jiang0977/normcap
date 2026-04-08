@@ -44,3 +44,45 @@ def test_split_full_desktop_to_screens(monkeypatch):
     assert set(convert_to_pixels(split_images[0])) == {(0, 0, 255, 255)}
     assert set(convert_to_pixels(split_images[1])) == {(0, 255, 0, 255)}
     assert set(convert_to_pixels(split_images[2])) == {(255, 0, 0, 255)}
+
+
+def test_split_full_desktop_to_screens_with_mixed_scaled_geometries(monkeypatch):
+    class MockedPrimaryScreen:
+        def virtualGeometry(self) -> QtCore.QRect:  # noqa: N802
+            return QtCore.QRect(0, 0, 160, 45)
+
+    class MockedScreen:
+        def __init__(self, left, top, width, height, dpr):
+            self._geometry = QtCore.QRect(left, top, width, height)
+            self._dpr = dpr
+
+        def geometry(self):
+            return self._geometry
+
+        def devicePixelRatio(self):  # noqa: N802
+            return self._dpr
+
+    def mocked_screens() -> list:
+        return [
+            MockedScreen(0, 0, 50, 40, 2),
+            MockedScreen(100, 0, 60, 45, 2),
+        ]
+
+    monkeypatch.setattr(QtWidgets.QApplication, "primaryScreen", MockedPrimaryScreen)
+    monkeypatch.setattr(QtWidgets.QApplication, "screens", mocked_screens)
+
+    image = QtGui.QImage(220, 90, QtGui.QImage.Format.Format_RGB32)
+    image.fill(QtGui.QColor("black"))
+
+    painter = QtGui.QPainter(image)
+    painter.fillRect(0, 0, 100, 80, QtGui.QColor("blue"))
+    painter.fillRect(100, 0, 120, 90, QtGui.QColor("green"))
+    painter.end()
+
+    split_images = post_processing.split_full_desktop_to_screens(image)
+
+    assert len(split_images) == 2
+    assert split_images[0].size().toTuple() == (100, 80)
+    assert split_images[1].size().toTuple() == (120, 90)
+    assert split_images[0].pixelColor(10, 10) == QtGui.QColor("blue")
+    assert split_images[1].pixelColor(10, 10) == QtGui.QColor("green")

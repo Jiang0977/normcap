@@ -127,6 +127,7 @@ chart = [
   { cmd = "pydeps normcap --max-bacon=1 -o=pydeps_internal.xdot -T=xdot" },
 ]
 bundle = [ { ref = "locales-compile" }, { cmd = "python bundle/build.py" } ]
+bundle-deb = [ { cmd = "./scripts/build_ubuntu_deb.sh" } ]
 bundle-dev = [
   { ref = "locales-compile" },
   { cmd = "python bundle/build.py --dev" },
@@ -359,6 +360,38 @@ ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/app/NormCap.AppDir/usr/app_packages/shibo
 
 USER brutus
 """
+
+[tool.briefcase.app.normcap.linux.system]
+long_description = """
+NormCap is an OCR-powered screen capture tool that extracts text from selected
+screen regions instead of storing screenshots as images.
+
+This branch also includes a screenshot annotation prototype that reuses the
+existing capture and region-selection flow before opening a separate editor.
+"""
+system_section = "utils"
+revision = 1
+
+[tool.briefcase.app.normcap.linux.system.debian]
+system_runtime_requires = [
+  "tesseract-ocr",
+  "tesseract-ocr-eng",
+  "tesseract-ocr-osd",
+  "wl-clipboard",
+  "xclip",
+  "gnome-screenshot",
+]
+
+[tool.briefcase.app.normcap.linux.system.ubuntu]
+system_runtime_requires = [
+  "tesseract-ocr",
+  "tesseract-ocr-eng",
+  "tesseract-ocr-osd",
+  "tesseract-ocr-chi-sim",
+  "wl-clipboard",
+  "xclip",
+  "gnome-screenshot",
+]
 
 [tool.tbump.version]
 current = "0.6.0"

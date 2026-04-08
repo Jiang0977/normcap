@@ -42,7 +42,8 @@ def test_capture(qapp):
         ("linux", "47.0", True, False, False, False, Handler.DBUS_PORTAL),
         ("linux", "47.0", False, False, False, False, Handler.QT),
         ("linux", "42.0", False, False, False, False, Handler.QT),
-        ("linux", "47.0", False, False, True, True, Handler.QT),
+        ("linux", "42.0", False, False, False, True, Handler.GNOME_SCREENSHOT),
+        ("linux", "47.0", False, False, True, True, Handler.GNOME_SCREENSHOT),
     ],
 )
 def test_get_available_handlers(

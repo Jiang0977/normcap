@@ -224,6 +224,37 @@ positioning fallback (`QT_SCREEN`) before relying on external helpers. This keep
 prototype usable on Ubuntu 24.04 setups where no extra Wayland positioning integration
 is installed.
 
+### Ubuntu `.deb` packaging
+
+This repository now also contains a reproducible Ubuntu 24.04 `.deb` build path for the
+current checkout.
+
+Build it from the project root:
+
+```sh
+./scripts/build_ubuntu_deb.sh
+```
+
+Or via Poe:
+
+```sh
+uv run poe bundle-deb
+```
+
+The script will:
+
+- ensure the development environment is synced
+- patch the local Briefcase Docker integration so extra Docker build args are passed in
+  the correct position
+- use Docker to target `ubuntu:noble`
+- run `briefcase create/build/package linux system -p deb`
+
+The resulting package is written to `dist/` with a name like:
+
+```sh
+dist/normcap_0.6.0-1~ubuntu-noble_amd64.deb
+```
+
 ## Contribute to UI translations
 
 Please use [Weblate](https://hosted.weblate.org/projects/normcap/ui/) to complement or
