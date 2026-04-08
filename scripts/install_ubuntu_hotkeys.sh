@@ -22,6 +22,7 @@ Usage:
 
 Options:
   --install-target PATH_OR_URL   Install from this local directory, wheel/tarball, or URL.
+                                 A local .deb is also supported.
                                  Defaults to the current repository root.
   --ocr-languages "LANGS"        Space-separated OCR languages for the OCR shortcut.
                                  Default: "chi_sim eng"
@@ -37,6 +38,7 @@ Options:
 Examples:
   ./scripts/install_ubuntu_hotkeys.sh
   ./scripts/install_ubuntu_hotkeys.sh --install-target dist/normcap-0.6.0-py3-none-any.whl
+  ./scripts/install_ubuntu_hotkeys.sh --install-target dist/normcap_0.6.2-1~ubuntu-noble_amd64.deb
   ./scripts/install_ubuntu_hotkeys.sh --ocr-languages "eng deu"
 EOF
 }
@@ -124,15 +126,41 @@ ensure_uv() {
     export PATH="${HOME}/.local/bin:${PATH}"
 }
 
-install_normcap() {
+install_mode() {
     local target="$1"
 
-    if [[ -d "${target}" ]]; then
-        run_cmd uv tool install --editable --force "${target}"
+    if [[ -f "${target}" && "${target}" == *.deb ]]; then
+        echo "system_package"
         return 0
     fi
 
-    run_cmd uv tool install --force "${target}"
+    if [[ -d "${target}" ]]; then
+        echo "editable"
+        return 0
+    fi
+
+    echo "uv_tool"
+}
+
+install_normcap() {
+    local target="$1"
+    local mode="$2"
+
+    case "${mode}" in
+        system_package)
+            run_cmd sudo apt-get install --reinstall -y "${target}"
+            ;;
+        editable)
+            run_cmd uv tool install --editable --force "${target}"
+            ;;
+        uv_tool)
+            run_cmd uv tool install --force "${target}"
+            ;;
+        *)
+            echo "Unsupported install mode: ${mode}" >&2
+            exit 1
+            ;;
+    esac
 }
 
 write_wrapper_scripts() {
@@ -279,24 +307,35 @@ PY
 
 main() {
     local resolved_target="${INSTALL_TARGET}"
+    local mode
     if [[ "${INSTALL_TARGET}" == /* ]] || [[ "${INSTALL_TARGET}" == *://* ]]; then
         resolved_target="${INSTALL_TARGET}"
     elif [[ -e "${INSTALL_TARGET}" ]]; then
         resolved_target="$(realpath "${INSTALL_TARGET}")"
     fi
 
+    mode="$(install_mode "${resolved_target}")"
+
     if [[ "${SKIP_DEPS}" -eq 0 ]]; then
         ensure_apt_packages
     fi
 
-    ensure_uv
-    install_normcap "${resolved_target}"
+    if [[ "${mode}" != "system_package" ]]; then
+        ensure_uv
+    fi
+
+    install_normcap "${resolved_target}" "${mode}"
 
     local normcap_bin annotate_bin
-    normcap_bin="$(command -v normcap)"
-    annotate_bin="$(command -v normcap-annotate-prototype)"
+    if [[ "${mode}" == "system_package" ]]; then
+        normcap_bin="/usr/bin/normcap"
+        annotate_bin="/usr/bin/normcap-annotate-prototype"
+    else
+        normcap_bin="$(command -v normcap)"
+        annotate_bin="$(command -v normcap-annotate-prototype)"
+    fi
 
-    if [[ -z "${normcap_bin}" || -z "${annotate_bin}" ]]; then
+    if [[ "${DRY_RUN}" -ne 1 ]] && [[ ! -x "${normcap_bin}" || ! -x "${annotate_bin}" ]]; then
         echo "NormCap commands were not installed correctly." >&2
         exit 1
     fi

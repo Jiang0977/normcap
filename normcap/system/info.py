@@ -20,6 +20,19 @@ logger = logging.getLogger(__name__)
 
 
 @functools.cache
+def briefcase_linux_uses_system_tesseract() -> bool:
+    """Whether the Linux briefcase package must fall back to system Tesseract."""
+    if not is_briefcase_package():
+        return False
+
+    if sys.platform != "linux" and "bsd" not in sys.platform:
+        return False
+
+    bundled_tesseract_path = Path(__file__).resolve().parents[3] / "bin" / "tesseract"
+    return not bundled_tesseract_path.exists()
+
+
+@functools.cache
 def config_directory() -> Path:
     """Retrieve platform specific configuration directory."""
     postfix = "normcap"
@@ -178,8 +191,18 @@ def get_tesseract_bin_path(is_briefcase_package: bool) -> Path:
         extension = ".exe" if sys.platform == "win32" else ""
         tesseract_path = bin_path / f"tesseract{extension}"
         if not tesseract_path.exists():
-            raise RuntimeError(f"Could not locate Tesseract binary {tesseract_path}!")
-        return tesseract_path
+            if briefcase_linux_uses_system_tesseract():
+                logger.info(
+                    "Bundled Tesseract binary %s is missing. Falling back to system "
+                    "Tesseract.",
+                    tesseract_path,
+                )
+            else:
+                raise RuntimeError(
+                    f"Could not locate Tesseract binary {tesseract_path}!"
+                )
+        else:
+            return tesseract_path
 
     # Then try to find tesseract on system
     if tesseract_bin := shutil.which("tesseract"):
@@ -196,7 +219,14 @@ def get_tesseract_bin_path(is_briefcase_package: bool) -> Path:
 @functools.cache
 def get_tessdata_path(config_directory: Path, is_packaged: bool) -> Path | None:
     """Decide which path for tesseract language files to use."""
-    if is_packaged:
+    if is_flatpak():
+        tessdata_path = config_directory / "tessdata"
+        return tessdata_path.resolve()
+
+    if is_briefcase_package():
+        if briefcase_linux_uses_system_tesseract():
+            return None
+
         tessdata_path = config_directory / "tessdata"
         return tessdata_path.resolve()
 

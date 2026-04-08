@@ -15,6 +15,14 @@
 - Add clickable desktop notifications in FlatPak package.
 - Add a new clipboard-handler `qt_wayland` to improve reliabilty of writing to clipboard on Wayland systems.
 
+## v0.6.2 (2026-04-09)
+
+**Linux:**
+- Fix Ubuntu GNOME hotkey installation so `Ctrl+Alt+A` and `Ctrl+Alt+O` are rebound to the currently installed commands instead of stale user-local paths.
+- Fix Ubuntu `.deb` packages to expose the annotation prototype as `normcap-annotate-prototype`.
+- Fix Linux `.deb` startup when no bundled Tesseract binary is present by falling back to the system `tesseract`.
+- Fix Linux `.deb` language detection and OCR to use system-installed tessdata when the package relies on the system Tesseract installation.
+
 ## v0.6.1 (2026-04-08)
 
 **Linux:**

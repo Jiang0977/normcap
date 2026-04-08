@@ -180,18 +180,21 @@ def test_to_dict():
 )
 def test_get_tesseract_path_in_briefcase(monkeypatch, platform, binary, directory):
     with monkeypatch.context() as m:
+        info.get_tesseract_bin_path.cache_clear()
         m.setattr(info, "is_briefcase_package", lambda: True)
         m.setattr(info.Path, "exists", lambda *args: True)
         m.setattr(info.sys, "platform", platform)
         path = info.get_tesseract_bin_path(
             is_briefcase_package=info.is_briefcase_package()
         )
+        info.get_tesseract_bin_path.cache_clear()
     assert path.name == binary
     assert path.parent.name == directory
 
 
 def test_get_tesseract_path_unknown_platform_raises(monkeypatch):
     with monkeypatch.context() as m:
+        info.get_tesseract_bin_path.cache_clear()
         m.setattr(info, "is_briefcase_package", lambda: True)
         m.setattr(info.Path, "exists", lambda *args: True)
         m.setattr(info.sys, "platform", "unknown")
@@ -199,37 +202,95 @@ def test_get_tesseract_path_unknown_platform_raises(monkeypatch):
             _ = info.get_tesseract_bin_path(
                 is_briefcase_package=info.is_briefcase_package()
             )
+        info.get_tesseract_bin_path.cache_clear()
 
 
 def test_get_tesseract_path_missing_binary_raises(monkeypatch):
     with monkeypatch.context() as m:
+        info.get_tesseract_bin_path.cache_clear()
         m.setattr(info, "is_briefcase_package", lambda: True)
+        m.setattr(info.sys, "platform", "win32")
         with pytest.raises(RuntimeError, match="Could not locate Tesseract binary"):
             _ = info.get_tesseract_bin_path(
                 is_briefcase_package=info.is_briefcase_package()
             )
+        info.get_tesseract_bin_path.cache_clear()
+
+
+def test_get_tesseract_path_linux_briefcase_falls_back_to_system(tmp_path, monkeypatch):
+    system_tesseract = tmp_path / "tesseract"
+    system_tesseract.write_text("")
+    with monkeypatch.context() as m:
+        info.get_tesseract_bin_path.cache_clear()
+        info.briefcase_linux_uses_system_tesseract.cache_clear()
+        m.setattr(info, "is_briefcase_package", lambda: True)
+        m.setattr(info.sys, "platform", "linux")
+        m.setattr(
+            info.shutil,
+            "which",
+            lambda binary: str(system_tesseract) if binary == "tesseract" else None,
+        )
+        path = info.get_tesseract_bin_path(
+            is_briefcase_package=info.is_briefcase_package()
+        )
+        info.briefcase_linux_uses_system_tesseract.cache_clear()
+        info.get_tesseract_bin_path.cache_clear()
+
+    assert path == system_tesseract
+
+
+def test_get_tessdata_path_linux_briefcase_system_tesseract(monkeypatch, tmp_path):
+    with monkeypatch.context() as m:
+        info.get_tessdata_path.cache_clear()
+        info.briefcase_linux_uses_system_tesseract.cache_clear()
+        m.setattr(info, "is_briefcase_package", lambda: True)
+        m.setattr(info, "is_flatpak", lambda: False)
+        m.setattr(info.sys, "platform", "linux")
+        path = info.get_tessdata_path(
+            config_directory=tmp_path / "config",
+            is_packaged=True,
+        )
+        info.briefcase_linux_uses_system_tesseract.cache_clear()
+        info.get_tessdata_path.cache_clear()
+
+    assert path is None
 
 
 def test_get_tesseract_path_missing_tesseract_raises(monkeypatch):
     with monkeypatch.context() as m:
+        info.get_tesseract_bin_path.cache_clear()
         m.setattr(info.shutil, "which", lambda _: False)
         with pytest.raises(RuntimeError, match="No Tesseract binary found"):
             _ = info.get_tesseract_bin_path(
                 is_briefcase_package=info.is_briefcase_package()
             )
+        info.get_tesseract_bin_path.cache_clear()
 
 
 @pytest.mark.parametrize(
-    ("is_briefcase", "is_flatpak", "has_prefix", "expected_path_end"),
+    (
+        "is_briefcase",
+        "is_flatpak",
+        "uses_system_tesseract",
+        "has_prefix",
+        "expected_path_end",
+    ),
     [
-        (True, False, False, "tessdata"),
-        (False, True, False, "tessdata"),
-        (False, False, True, "tessdata"),
-        (False, False, False, None),
+        (True, False, False, False, "tessdata"),
+        (True, False, True, False, None),
+        (False, True, False, False, "tessdata"),
+        (False, False, False, True, "tessdata"),
+        (False, False, False, False, None),
     ],
 )
 def test_get_tessdata_path(
-    monkeypatch, caplog, is_briefcase, is_flatpak, has_prefix, expected_path_end
+    monkeypatch,
+    caplog,
+    is_briefcase,
+    is_flatpak,
+    uses_system_tesseract,
+    has_prefix,
+    expected_path_end,
 ):
     data_file = info.config_directory() / "tessdata" / "mocked.traineddata"
     data_file.parent.mkdir(parents=True, exist_ok=True)
@@ -237,8 +298,15 @@ def test_get_tessdata_path(
 
     try:
         with monkeypatch.context() as m:
+            info.get_tessdata_path.cache_clear()
+            info.briefcase_linux_uses_system_tesseract.cache_clear()
             m.setattr(info, "is_briefcase_package", lambda: is_briefcase)
             m.setattr(info, "is_flatpak", lambda: is_flatpak)
+            m.setattr(
+                info,
+                "briefcase_linux_uses_system_tesseract",
+                lambda: uses_system_tesseract,
+            )
             if has_prefix:
                 m.setenv("TESSDATA_PREFIX", f"{data_file.resolve().parents[1]}")
 

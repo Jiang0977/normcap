@@ -124,6 +124,10 @@ PY
     fi
 }
 
+install_auxiliary_launchers() {
+    run_cmd uv run python bundle/ubuntu_system_launchers.py build/normcap/ubuntu
+}
+
 main() {
     cd "${REPO_ROOT}"
 
@@ -142,6 +146,8 @@ main() {
         --target "${TARGET_IMAGE}" \
         --no-input \
         --Xdocker-build="--network=host"
+
+    install_auxiliary_launchers
 
     run_cmd uv run briefcase package linux system \
         --target "${TARGET_IMAGE}" \
