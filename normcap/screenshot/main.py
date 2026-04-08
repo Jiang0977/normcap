@@ -10,6 +10,7 @@ from normcap.screenshot.handlers import (
     spectacle,
 )
 from normcap.screenshot.models import Handler, HandlerProtocol
+from normcap.system import info
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,24 @@ _capture_handlers: dict[Handler, HandlerProtocol] = {
 }
 
 
+def _handlers_in_preferred_order() -> list[Handler]:
+    handlers = list(Handler)
+
+    # GNOME on X11 is more reliable with the compositor-backed screenshot tool than
+    # with Qt's direct window grab, especially on HiDPI multi-monitor setups.
+    if info.is_gnome() and not info.display_manager_is_wayland():
+        handlers.remove(Handler.GNOME_SCREENSHOT)
+        handlers.insert(0, Handler.GNOME_SCREENSHOT)
+
+    return handlers
+
+
 def get_available_handlers() -> list[Handler]:
-    compatible_handlers = [h for h in Handler if _capture_handlers[h].is_compatible()]
+    compatible_handlers = [
+        h
+        for h in _handlers_in_preferred_order()
+        if _capture_handlers[h].is_compatible()
+    ]
     logger.debug(
         "Compatible capture handlers: %s", [h.name for h in compatible_handlers]
     )

@@ -47,6 +47,7 @@ def capture() -> list[QtGui.QImage]:
     """
     with tempfile.TemporaryDirectory() as temp_dir:
         image_path = Path(temp_dir) / "normcap_gnome_screenshot.png"
+        image_path.touch()
         result = subprocess.run(  # noqa: S603
             ["gnome-screenshot", f"--file={image_path.resolve()}"],  # noqa: S607
             shell=False,
@@ -55,12 +56,27 @@ def capture() -> list[QtGui.QImage]:
             text=True,
             capture_output=True,
         )
-        if result.returncode != 0:
+        full_image = QtGui.QImage(str(image_path))
+        if result.returncode != 0 and full_image.isNull():
             logger.error(
                 "Command '%s' failed: %s", " ".join(result.args), result.stderr
             )
             result.check_returncode()
-
-        full_image = QtGui.QImage(image_path)
+        if result.returncode != 0:
+            logger.warning(
+                (
+                    "Command '%s' returned non-zero, but produced a readable "
+                    "screenshot: %s"
+                ),
+                " ".join(result.args),
+                result.stderr,
+            )
+        if full_image.isNull():
+            msg = (
+                "gnome-screenshot did not produce a readable screenshot file at "
+                f"{image_path.resolve()}"
+            )
+            logger.error(msg)
+            raise RuntimeError(msg)
 
     return split_full_desktop_to_screens(full_image)

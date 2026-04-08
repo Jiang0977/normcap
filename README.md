@@ -30,9 +30,9 @@ take a look at the [FAQs](https://dynobo.github.io/normcap/#faqs) or
 
 #### Windows
 
-- [NormCap-0.6.0-x86_64-Windows.msi](https://github.com/dynobo/normcap/releases/download/v0.6.0/NormCap-0.6.0-x86_64-Windows.msi)
+- [NormCap-0.6.1-x86_64-Windows.msi](https://github.com/dynobo/normcap/releases/download/v0.6.1/NormCap-0.6.1-x86_64-Windows.msi)
   (Installer)
-- [NormCap-0.6.0-x86_64-Windows.zip](https://github.com/dynobo/normcap/releases/download/v0.6.0/NormCap-0.6.0-x86_64-Windows.zip)
+- [NormCap-0.6.1-x86_64-Windows.zip](https://github.com/dynobo/normcap/releases/download/v0.6.1/NormCap-0.6.1-x86_64-Windows.zip)
   (Portable)
 
 #### Linux
@@ -48,7 +48,7 @@ flatpak install flathub com.github.dynobo.normcap
 
 Alternative options:
 
-- [NormCap-0.6.0-x86_64.AppImage](https://github.com/dynobo/normcap/releases/download/v0.6.0/NormCap-0.6.0-x86_64.AppImage) - ⚠️ ***deprecated***
+- [NormCap-0.6.1-x86_64.AppImage](https://github.com/dynobo/normcap/releases/download/v0.6.1/NormCap-0.6.1-x86_64.AppImage) - ⚠️ ***deprecated***
   (Requires [fuse](https://dynobo.github.io/normcap/faqs/#linux-appimage-error-appimages-require-fuse-to-run))
 - [`normcap` @ AUR](https://aur.archlinux.org/packages/normcap) (Arch/Manjaro)
 
@@ -61,9 +61,9 @@ current checkout with the helper script below instead of using the historical Ap
 "Security & Privacy" → "General" → "Open anyway". You also need to allow NormCap to take
 screenshots. ([#135](https://github.com/dynobo/normcap/issues/135))
 
-- [NormCap-0.6.0-x86_64-macOS.dmg](https://github.com/dynobo/normcap/releases/download/v0.6.0/NormCap-0.6.0-x86_64-macOS.dmg)
+- [NormCap-0.6.1-x86_64-macOS.dmg](https://github.com/dynobo/normcap/releases/download/v0.6.1/NormCap-0.6.1-x86_64-macOS.dmg)
   (Installer for x86/64)
-- [NormCap-0.6.0-arm64-macOS.dmg](https://github.com/dynobo/normcap/releases/download/v0.6.0/NormCap-0.6.0-arm64-macOS.dmg)
+- [NormCap-0.6.1-arm64-macOS.dmg](https://github.com/dynobo/normcap/releases/download/v0.6.1/NormCap-0.6.1-arm64-macOS.dmg)
   (Installer for M1)
 
 ## Use Python package
@@ -223,6 +223,37 @@ On GNOME Wayland, multi-monitor capture windows now also use a Qt-native screen
 positioning fallback (`QT_SCREEN`) before relying on external helpers. This keeps the
 prototype usable on Ubuntu 24.04 setups where no extra Wayland positioning integration
 is installed.
+
+### Ubuntu `.deb` packaging
+
+This repository now also contains a reproducible Ubuntu 24.04 `.deb` build path for the
+current checkout.
+
+Build it from the project root:
+
+```sh
+./scripts/build_ubuntu_deb.sh
+```
+
+Or via Poe:
+
+```sh
+uv run poe bundle-deb
+```
+
+The script will:
+
+- ensure the development environment is synced
+- patch the local Briefcase Docker integration so extra Docker build args are passed in
+  the correct position
+- use Docker to target `ubuntu:noble`
+- run `briefcase create/build/package linux system -p deb`
+
+The resulting package is written to `dist/` with a name like:
+
+```sh
+dist/normcap_0.6.0-1~ubuntu-noble_amd64.deb
+```
 
 ## Contribute to UI translations
 
