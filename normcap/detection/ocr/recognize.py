@@ -65,17 +65,20 @@ def get_text_from_image(
     )
     result = OcrResult(tess_args=tess_args, words=ocr_result_data, image=image)
     logger.debug("OCR detections:\n%s", ",\n".join(str(w) for w in result.words))
+    return to_detection_results(ocr_result=result, parse=parse)
 
+
+def to_detection_results(ocr_result: OcrResult, parse: bool) -> list[DetectionResult]:
     if not parse:
         return [
             DetectionResult(
-                text=result.text,
+                text=ocr_result.text,
                 text_type=TextType.SINGLE_LINE,
                 detector=TextDetector.OCR_RAW,
             )
         ]
 
-    result = transformer.apply(result)
+    result = transformer.apply(ocr_result)
     logger.debug("Parsed text:\n%s", result.parsed)
     text_type = (
         TextType[result.best_scored_transformer.value]
@@ -83,7 +86,7 @@ def get_text_from_image(
         else TextType.SINGLE_LINE
     )
 
-    detections = [
+    return [
         DetectionResult(
             text=s,
             text_type=text_type,
@@ -91,4 +94,3 @@ def get_text_from_image(
         )
         for s in result.parsed
     ]
-    return detections

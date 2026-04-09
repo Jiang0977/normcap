@@ -12,15 +12,19 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from normcap import app_id, clipboard, notification, screenshot
 from normcap.detection import detector, ocr
 from normcap.detection.models import DetectionMode, DetectionResult
+from normcap.detection.ocr import engines
 from normcap.gui import (
     constants,
+    detection_worker,
     introduction,
     notification_utils,
+    ocr_settings,
     permissions_dialog,
     utils,
 )
 from normcap.gui.dbus_application_service import DBusApplicationService
 from normcap.gui.language_manager import LanguageManager
+from normcap.gui.localization import _
 from normcap.gui.settings import Settings
 from normcap.gui.socket_server import SocketServer
 from normcap.gui.tray import SystemTray
@@ -111,6 +115,8 @@ class NormcapApp(QtWidgets.QApplication):
         self.screenshot_handler_name = args.get("screenshot_handler")
         self.clipboard_handler_name = args.get("clipboard_handler")
         self.notification_handler_name = args.get("notification_handler")
+        self.detection_threadpool = QtCore.QThreadPool()
+        self.detection_worker: detection_worker.DetectionWorker | None = None
 
         # Check if have screenshot permission and try to request if needed
         self._verify_screenshot_permission()
@@ -228,6 +234,7 @@ class NormcapApp(QtWidgets.QApplication):
             window.menu_button.com.on_manage_languages.connect(
                 self._open_language_manager
             )
+            window.menu_button.com.on_show_ocr_settings.connect(self._open_ocr_settings)
             window.menu_button.com.on_show_introduction.connect(self.show_introduction)
             window.menu_button.com.on_close.connect(
                 lambda: self._minimize_to_tray_or_exit(delay=0)
@@ -327,29 +334,62 @@ class NormcapApp(QtWidgets.QApplication):
             self._minimize_to_tray_or_exit(delay=0)
             return
 
-        tessdata_path = info.get_tessdata_path(
-            config_directory=info.config_directory(),
-            is_packaged=info.is_packaged(),
+        ocr_engine = engines.normalize(
+            str(self.settings.value("ocr-engine", "tesseract"))
         )
-        tesseract_bin_path = info.get_tesseract_bin_path(
-            is_briefcase_package=info.is_briefcase_package()
-        )
+        tessdata_path = None
+        tesseract_bin_path = None
 
         detection_mode = DetectionMode(0)
         if bool(self.settings.value("detect-codes", type=bool)):
             detection_mode |= DetectionMode.CODES
         if bool(self.settings.value("detect-text", type=bool)):
-            detection_mode |= DetectionMode.TESSERACT
+            detection_mode |= DetectionMode.TEXT
 
-        results = detector.detect(
-            image=cropped_screenshot,
-            tesseract_bin_path=tesseract_bin_path,
-            tessdata_path=tessdata_path,
-            language=self.settings.value("language"),
-            detect_mode=detection_mode,
-            parse_text=bool(self.settings.value("parse-text", type=bool)),
-        )
+        if DetectionMode.TEXT in detection_mode and engines.uses_tesseract_languages(
+            ocr_engine
+        ):
+            tessdata_path = info.get_tessdata_path(
+                config_directory=info.config_directory(),
+                is_packaged=info.is_packaged(),
+            )
+            tesseract_bin_path = info.get_tesseract_bin_path(
+                is_briefcase_package=info.is_briefcase_package()
+            )
 
+        detect_kwargs = {
+            "image": cropped_screenshot,
+            "tesseract_bin_path": tesseract_bin_path,
+            "tessdata_path": tessdata_path,
+            "language": self.settings.value("language"),
+            "detect_mode": detection_mode,
+            "parse_text": bool(self.settings.value("parse-text", type=bool)),
+            "ocr_engine": ocr_engine,
+            "baidu_api_key": str(self.settings.value("baidu-api-key", "")),
+            "baidu_secret_key": str(self.settings.value("baidu-secret-key", "")),
+            "baidu_language_type": str(
+                self.settings.value("baidu-language-type", "CHN_ENG")
+            ),
+        }
+
+        if DetectionMode.TEXT in detection_mode and engines.is_baidu(ocr_engine):
+            self.detection_worker = detection_worker.DetectionWorker(
+                detect_func=lambda: detector.detect(**detect_kwargs)
+            )
+            self.detection_worker.com.on_detection_finished.connect(
+                self._handle_detection_results
+            )
+            self.detection_worker.com.on_detection_failed.connect(
+                self._handle_detection_error
+            )
+            self.detection_threadpool.start(self.detection_worker)
+            return
+
+        results = detector.detect(**detect_kwargs)
+        self._handle_detection_results(results)
+
+    @QtCore.Slot(object)
+    def _handle_detection_results(self, results: list[DetectionResult]) -> None:
         result_text = os.linesep.join(r.text for r in results)
 
         if result_text and self.cli_mode:
@@ -364,6 +404,16 @@ class NormcapApp(QtWidgets.QApplication):
 
         self._minimize_to_tray_or_exit(delay=self._EXIT_DELAY_SECONDS)
         self.tray.show_completion_icon()
+
+    @QtCore.Slot(str)
+    def _handle_detection_error(self, message: str) -> None:
+        logger.error("Detection failed: %s", message)
+        QtWidgets.QMessageBox.critical(
+            None,
+            _("Error"),
+            _("OCR detection failed.") + f"\n\n{message}",
+        )
+        self._minimize_to_tray_or_exit(delay=0)
 
     def _copy_to_clipboard(self, text: str) -> None:
         """Copy results to clipboard."""
@@ -437,9 +487,16 @@ class NormcapApp(QtWidgets.QApplication):
         contribute to the delay until the GUI becomes active for the user on startup.
         """
         self._add_update_checker()
-        self._update_installed_languages()
+        if engines.uses_tesseract_languages(self.settings.value("ocr-engine")):
+            self._update_installed_languages()
+        else:
+            self.installed_languages = []
 
     def _update_installed_languages(self) -> None:
+        if not engines.uses_tesseract_languages(self.settings.value("ocr-engine")):
+            self.installed_languages = []
+            return
+
         self.installed_languages = ocr.tesseract.get_languages(
             tesseract_cmd=info.get_tesseract_bin_path(
                 is_briefcase_package=info.is_briefcase_package()
@@ -454,6 +511,9 @@ class NormcapApp(QtWidgets.QApplication):
     @QtCore.Slot()
     def _open_language_manager(self) -> None:
         """Open url in default browser, then hide to tray or exit."""
+        if not engines.uses_tesseract_languages(self.settings.value("ocr-engine")):
+            return
+
         logger.debug("Loading language manager …")
         self.language_window = LanguageManager(
             tessdata_path=info.config_directory() / "tessdata",
@@ -465,6 +525,21 @@ class NormcapApp(QtWidgets.QApplication):
         )
         self.language_window.exec()
 
+    @QtCore.Slot()
+    def _open_ocr_settings(self) -> None:
+        dialog = ocr_settings.OcrSettingsDialog(
+            settings=self.settings,
+            parent=self.windows[0] if self.windows else None,
+        )
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+
+        self._update_installed_languages()
+        for window in self.windows.values():
+            window.installed_languages = self.installed_languages
+            if window.menu_button is not None:
+                window.menu_button.installed_languages = self.installed_languages
+
     @QtCore.Slot(list)
     def _sanitize_language_setting(
         self,
@@ -473,6 +548,9 @@ class NormcapApp(QtWidgets.QApplication):
 
         If one doesn't, remove it. If none does, select the first in list.
         """
+        if not self.installed_languages:
+            return
+
         active_languages = self.settings.value("language")
         if not isinstance(active_languages, list):
             active_languages = [active_languages]

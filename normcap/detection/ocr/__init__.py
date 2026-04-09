@@ -1,3 +1,3 @@
-from normcap.detection.ocr import models, recognize, tesseract
+from normcap.detection.ocr import baidu, engines, models, recognize, tesseract
 
-__all__ = ["models", "recognize", "tesseract"]
+__all__ = ["baidu", "engines", "models", "recognize", "tesseract"]

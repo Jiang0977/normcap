@@ -6,6 +6,7 @@ import sys
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from normcap import __version__
+from normcap.detection.ocr import engines
 from normcap.gui.constants import URLS
 from normcap.gui.localization import _
 
@@ -73,6 +74,7 @@ class Communicate(QtCore.QObject):
     on_open_url = QtCore.Signal(str)
     on_close = QtCore.Signal(str)
     on_manage_languages = QtCore.Signal()
+    on_show_ocr_settings = QtCore.Signal()
     on_show_introduction = QtCore.Signal()
 
 
@@ -157,6 +159,10 @@ class MenuButton(QtWidgets.QToolButton):
 
         if action_name == "show_introduction":
             self.com.on_show_introduction.emit()
+            return
+
+        if action_name == "show_ocr_settings":
+            self.com.on_show_ocr_settings.emit()
             return
 
         if action_name.startswith(("file:/", "https:/")):
@@ -270,6 +276,12 @@ class MenuButton(QtWidgets.QToolButton):
         )
         menu.addAction(action)
 
+        action = QtGui.QAction(_("OCR settings"), settings_group)
+        action.setObjectName("show_ocr_settings")
+        action.setCheckable(False)
+        action.setToolTip(_("Configure OCR engine and cloud OCR credentials."))
+        menu.addAction(action)
+
     def _add_postprocessing_section(self, menu: QtWidgets.QMenu) -> None:
         postprocessing_group = QtGui.QActionGroup(menu)
         postprocessing_group.setObjectName("postprocessing_group")
@@ -320,6 +332,16 @@ class MenuButton(QtWidgets.QToolButton):
         menu.addAction(action)
 
     def _add_languages_section(self, menu: QtWidgets.QMenu) -> None:
+        if engines.is_baidu(str(self.settings.value("ocr-engine", "tesseract"))):
+            action = QtGui.QAction(
+                _("Baidu language type is configured in OCR settings."),
+                menu,
+            )
+            action.setObjectName("baidu_language_hint")
+            action.setEnabled(False)
+            menu.addAction(action)
+            return
+
         overflow_languages_count = 7
         if len(self.installed_languages) <= overflow_languages_count:
             language_menu = menu

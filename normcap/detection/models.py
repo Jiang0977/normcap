@@ -3,7 +3,7 @@ from typing import NamedTuple
 
 
 class DetectionMode(enum.Flag):
-    TESSERACT = enum.auto()
+    TEXT = enum.auto()
     CODES = enum.auto()
 
 

@@ -1,5 +1,6 @@
 """Global constant strings."""
 
+from normcap.detection.ocr import engines
 from normcap.gui.localization import _
 from normcap.gui.models import Urls
 
@@ -25,6 +26,24 @@ TESSDATA_BEST_BASE_URL = f"{TESSDATA_BEST_REPO}/raw/4.1.0/"
 
 TESSDATA_FAST_REPO = "https://github.com/tesseract-ocr/tessdata_fast"
 TESSDATA_FAST_BASE_URL = f"{TESSDATA_FAST_REPO}/raw/4.1.0/"
+
+OCR_ENGINES = (
+    (engines.TESSERACT, _("Tesseract (local)")),
+    (engines.BAIDU, _("Baidu OCR (cloud)")),
+)
+
+BAIDU_LANGUAGE_TYPES = (
+    "CHN_ENG",
+    "ENG",
+    "JAP",
+    "KOR",
+    "FRE",
+    "SPA",
+    "POR",
+    "GER",
+    "ITA",
+    "RUS",
+)
 
 CMD_WAYLAND_PERMISSION = (
     "<p><code>"

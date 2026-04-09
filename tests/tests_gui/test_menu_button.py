@@ -18,6 +18,17 @@ def test_show_introduction(qtbot, menu_btn):
     assert result.signal_triggered
 
 
+def test_open_ocr_settings(qtbot, menu_btn):
+    menu_btn.menu().aboutToShow.emit()
+
+    ocr_settings_action = menu_btn.findChild(QtGui.QAction, "show_ocr_settings")
+    assert "ocr" in ocr_settings_action.text().lower()
+
+    with qtbot.waitSignal(menu_btn.com.on_show_ocr_settings, timeout=1000) as result:
+        ocr_settings_action.trigger()
+    assert result.signal_triggered
+
+
 def test_enable_language_manager(qtbot, menu_btn):
     # GIVEN a button with a generated menu
     #   and a certain menu item
@@ -71,6 +82,17 @@ def test_languages_section_does_overflow(qtbot, menu_btn):
 
     language_group = select_menu.findChild(QtGui.QActionGroup, "language_group")
     assert len(language_group.children()) == threshold
+
+
+def test_baidu_engine_shows_language_hint(menu_btn):
+    menu_btn.settings.setValue("ocr-engine", "baidu")
+    menu_btn.menu().aboutToShow.emit()
+
+    language_group = menu_btn.findChild(QtGui.QActionGroup, "language_group")
+    assert language_group is None
+
+    baidu_hint = menu_btn.findChild(QtGui.QAction, "baidu_language_hint")
+    assert "ocr settings" in baidu_hint.text().lower()
 
 
 def test_close_triggered(qtbot, menu_btn):

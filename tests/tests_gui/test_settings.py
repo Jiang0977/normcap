@@ -35,6 +35,17 @@ def test_update_from_init_settings(caplog):
         settings.clear()
 
 
+def test_baidu_settings_defaults():
+    settings = Settings(organization="normcap_TEST")
+    try:
+        assert settings.value("ocr-engine") == "tesseract"
+        assert settings.value("baidu-api-key") == ""
+        assert settings.value("baidu-secret-key") == ""
+        assert settings.value("baidu-language-type") == "CHN_ENG"
+    finally:
+        settings.clear()
+
+
 def test_set_missing_to_default(caplog):
     default_parse_text = True
     non_default_parse_text = False
